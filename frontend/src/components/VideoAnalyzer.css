@@ -1,0 +1,127 @@
+.video-analyzer {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+/* Modified: Removed position:relative since we're using side-by-side */
+.video-container {
+  width: 100%;
+  flex: 1;
+  background-color: #000;
+  overflow: hidden;
+}
+
+/* Added: Main container for side-by-side layout */
+.side-by-side-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 20px;
+}
+
+/* Added: Styles for individual containers */
+.video-wrapper, .keypoints-container {
+  flex: 1;
+  min-height: 360px;
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.keypoints-container {
+  border: 1px solid #333;
+}
+
+/* Removed: .keypoints-container.overlay class since we're no longer overlaying */
+
+.video-controls {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  background-color: #424242;
+  border-radius: 4px;
+  margin: 16px 0;
+}
+
+.control-button {
+  margin-right: 16px;
+  min-width: 80px;
+}
+
+.seek-slider {
+  flex: 1;
+  margin: 0 16px;
+}
+
+.frame-counter {
+  margin-right: 16px;
+  color: white;
+  font-size: 14px;
+}
+
+.mark-button {
+  background-color: #f44336;
+}
+
+.mark-button:hover {
+  background-color: #e53935;
+}
+
+.panels-container {
+  display: flex;
+  gap: 16px;
+  margin-top: 16px;
+  overflow-y: auto;
+  flex-wrap: wrap;
+}
+
+/* Responsive layouts */
+@media (max-width: 768px) {
+  /* Modified: Added more responsive styles for the side-by-side view */
+  .side-by-side-container {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .video-wrapper, .keypoints-container {
+    width: 100%;
+    margin-bottom: 10px;
+  }
+
+  .video-controls {
+    flex-wrap: wrap;
+  }
+
+  .control-button, .mark-button {
+    margin-bottom: 8px;
+  }
+
+  .seek-slider {
+    width: 100%;
+    margin: 8px 0;
+  }
+
+  .panels-container {
+    flex-direction: column;
+  }
+}

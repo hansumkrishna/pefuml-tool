@@ -1,0 +1,79 @@
+.frame-marker {
+    flex: 1;
+    min-width: 300px;
+    background-color: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    padding: 16px;
+    overflow-y: auto;
+  }
+  
+.frame-marker h3 {
+  margin-top: 0;
+  font-size: 18px;
+  color: #333;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 8px;
+}
+
+.marked-frames-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.marked-frame-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.marked-frame-item:hover {
+  background-color: #e0e0e0;
+}
+
+.marked-frame-item.active {
+  background-color: #e3f2fd;
+  border-left: 4px solid #2196f3;
+}
+
+.marked-frame-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.marked-frame-name {
+  font-weight: 500;
+  font-size: 16px;
+}
+
+.marked-frame-number {
+  font-size: 12px;
+  color: #757575;
+  margin-top: 4px;
+}
+
+.remove-frame-button {
+  background-color: transparent;
+  color: #f44336;
+  font-size: 20px;
+  border: none;
+  cursor: pointer;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 0;
+}
+
+.remove-frame-button:hover {
+  background-color: rgba(244, 67, 54, 0.1);
+}
