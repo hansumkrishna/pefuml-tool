@@ -52,8 +52,6 @@
   border: 1px solid #333;
 }
 
-/* Removed: .keypoints-container.overlay class since we're no longer overlaying */
-
 .video-controls {
   display: flex;
   align-items: center;

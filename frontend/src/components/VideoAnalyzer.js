@@ -16,7 +16,7 @@ const VideoAnalyzer = () => {
     setIsPlaying,
     markCurrentFrame
   } = useVideoContext();
-  
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const threeContainerRef = useRef(null);
@@ -34,7 +34,7 @@ const VideoAnalyzer = () => {
     // Create scene
     const newScene = new THREE.Scene();
     newScene.background = new THREE.Color(0x222222); // Dark gray background
-    newScene.background.alpha = 0.5;
+    newScene.background.alpha = 1;
     
     // Create camera
     const newCamera = new THREE.PerspectiveCamera(
@@ -95,13 +95,13 @@ const VideoAnalyzer = () => {
     // Resize handler
     const handleResize = () => {
       if (!threeContainerRef.current) return;
-      
+
       const containerWidth = threeContainerRef.current.clientWidth;
       const containerHeight = threeContainerRef.current.clientHeight;
-      
+
       newCamera.aspect = containerWidth / containerHeight;
       newCamera.updateProjectionMatrix();
-      
+
       newRenderer.setSize(containerWidth, containerHeight);
     };
     
@@ -115,7 +115,14 @@ const VideoAnalyzer = () => {
       }
     };
   }, [displayOptions.showKeypoints]);
-  
+  useEffect(() => {
+      console.log("Display options:", displayOptions);
+      console.log("Current frame:", currentFrame);
+      if (videoData) {
+        console.log("Frame data available:", !!videoData.keypoints_timeline[currentFrame]);
+      }
+    }, [displayOptions, currentFrame, videoData]);
+
   // Update skeleton based on current frame's keypoints
   useEffect(() => {
     if (!videoData || !skeleton || !scene || currentFrame === null) return;
@@ -131,21 +138,21 @@ const VideoAnalyzer = () => {
     }
     
     // Create transparent materials for joints
-    const jointMaterial = new THREE.MeshPhongMaterial({ 
+    const jointMaterial = new THREE.MeshPhongMaterial({
       color: 0xff0000,
       transparent: true,
-      opacity: 0.7 // Adjust this value between 0-1 for desired transparency
+      opacity: 1 // Adjust this value between 0-1 for desired transparency
     });
 
     // Create transparent materials for bones/lines
-    const boneMaterial = new THREE.LineBasicMaterial({ 
-      color: 0x00ff00, 
+    const boneMaterial = new THREE.LineBasicMaterial({
+      color: 0x00ff00,
       transparent: true,
-      opacity: 0.7 // Adjust this value between 0-1 for desired transparency
+      opacity: 1 // Adjust this value between 0-1 for desired transparency
     });
 
     frameData.keypoints.forEach((keypoint, index) => {
-      if (keypoint.visibility > 0.5) {
+      if (keypoint.visibility > 0) {
         const jointGeometry = new THREE.SphereGeometry(0.02, 16, 16);
         const joint = new THREE.Mesh(jointGeometry, jointMaterial);
         
@@ -182,6 +189,7 @@ const VideoAnalyzer = () => {
           new THREE.Vector3(point1.x, -point1.y, -point1.z),
           new THREE.Vector3(point2.x, -point2.y, -point2.z)
         ];
+
         
         const geometry = new THREE.BufferGeometry().setFromPoints(points);
         const line = new THREE.Line(geometry, boneMaterial);
@@ -231,7 +239,7 @@ const VideoAnalyzer = () => {
       videoRef.current.pause();
     }
   }, [isPlaying, setIsPlaying]);
-  
+
   // Seek to specific frame
   useEffect(() => {
     if (!videoRef.current || !videoData || currentFrame === null) return;
@@ -245,15 +253,20 @@ const VideoAnalyzer = () => {
   }, [videoData, currentFrame]);
   
   const handlePlayPause = () => {
-    setIsPlaying(!isPlaying);
-  };
+      setIsPlaying(!isPlaying);
+      console.log("Attempting to:", !isPlaying ? "play" : "pause");
+      // Try to force play directly
+      if (!isPlaying) {
+        videoRef.current.play().catch(e => console.error("Play error:", e));
+      }
+    };
   
   const handleSeek = (e) => {
     if (!videoData) return;
-    
+
     const totalFrames = videoData.total_frames;
     const seekPosition = parseInt(e.target.value);
-    
+
     setCurrentFrame(seekPosition);
   };
   
@@ -283,7 +296,7 @@ const VideoAnalyzer = () => {
             <video 
               ref={videoRef}
               className="video-player"
-              src={`${process.env.REACT_APP_API_URL}/uploads/${videoData.id}_${videoData.filename}`}
+              src={`http://localhost:5000/api/uploads/${videoData.id}_${videoData.filename}`}
               controls={false}
             />
           </div>

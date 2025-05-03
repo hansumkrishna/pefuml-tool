@@ -10,7 +10,7 @@ const FrameMarker = () => {
     setCurrentFrame, 
     removeMarkedFrame 
   } = useVideoContext();
-  
+
   if (!videoData || markedFrames.length === 0) {
     return (
       <div className="frame-marker">
@@ -31,7 +31,7 @@ const FrameMarker = () => {
       removeMarkedFrame(frameId);
     }
   };
-  
+
   return (
     <div className="frame-marker">
       <h3>Marked Frames</h3>
