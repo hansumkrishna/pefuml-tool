@@ -1,0 +1,159 @@
+.shot-detection {
+  background-color: #f8f9fa;
+  border-radius: 6px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 16px;
+  overflow: hidden;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background-color: #e9ecef;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.toggle-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  color: #495057;
+  padding: 4px 8px;
+}
+
+.toggle-button:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  border-radius: 4px;
+}
+
+.panel-content {
+  padding: 16px;
+}
+
+.event-name-container {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+}
+
+.event-name-container label {
+  margin-right: 8px;
+  font-weight: 500;
+  min-width: 80px;
+}
+
+.event-name-input {
+  flex: 1;
+  padding: 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.metrics-container {
+  margin-bottom: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+}
+
+.metrics-section {
+  padding: 12px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.metrics-section:last-child {
+  border-bottom: none;
+}
+
+.metrics-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  color: #495057;
+}
+
+.metric-item {
+  margin-bottom: 12px;
+  background-color: #ffffff;
+  padding: 8px;
+  border-radius: 4px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.metric-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.metric-header input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+.metric-label {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.metric-controls {
+  display: flex;
+  gap: 16px;
+}
+
+.value-control, .margin-control {
+  display: flex;
+  align-items: center;
+}
+
+.value-control label, .margin-control label {
+  margin-right: 8px;
+  font-size: 12px;
+  color: #6c757d;
+  min-width: 70px;
+}
+
+.value-control input, .margin-control input {
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  width: 80px;
+  font-size: 13px;
+}
+
+.value-control input:disabled, .margin-control input:disabled {
+  background-color: #e9ecef;
+  cursor: not-allowed;
+}
+
+.detect-button {
+  width: 100%;
+  padding: 10px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.detect-button:hover {
+  background-color: #0069d9;
+}
+
+.detect-button:active {
+  background-color: #0062cc;
+}

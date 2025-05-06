@@ -21,10 +21,8 @@ const ShotDetection = () => {
     // Collect all available metrics from all sections
     const metrics = [];
 
-    // Process each measurement category
-    Object.entries(frameAnalytics.measurements).forEach(([categoryKey, categoryData]) => {
-      // Handle special case for lunge_distance which is a direct value, not an object
-      if (categoryKey === 'lunge_distance') {
+    Object.entries(frameAnalytics.measurements).forEach(([sectionKey, sectionData]) => {
+      if (sectionKey === 'lunge_distance') {
         metrics.push({
           id: 'lunge_distance',
           label: 'Lunge Distance',
@@ -34,19 +32,16 @@ const ShotDetection = () => {
         return;
       }
 
-      // For nested measurement categories, process each metric within them
-      if (typeof categoryData === 'object') {
-        Object.entries(categoryData).forEach(([metricKey, metricValue]) => {
-          if (metricValue !== undefined && metricValue !== null && !isNaN(metricValue)) {
-            metrics.push({
-              id: `${categoryKey}.${metricKey}`,
-              label: formatMetricLabel(metricKey),
-              value: metricValue,
-              section: formatSectionTitle(categoryKey)
-            });
-          }
-        });
-      }
+      Object.entries(sectionData).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && !isNaN(value)) {
+          metrics.push({
+            id: `${sectionKey}.${key}`,
+            label: formatMetricLabel(key),
+            value: value,
+            section: formatSectionTitle(sectionKey)
+          });
+        }
+      });
     });
 
     setAvailableMetrics(metrics);
@@ -150,15 +145,14 @@ const ShotDetection = () => {
         for (const filter of filters) {
           let actualValue;
 
-          // Extract the actual value from the frame data based on the metric ID
+          // Extract the actual value from the frame data
           if (filter.id === 'lunge_distance') {
             actualValue = frameData.measurements.lunge_distance;
           } else {
-            // For nested metrics, split the ID to get category and metric name
-            const [category, metric] = filter.id.split('.');
-            if (frameData.measurements[category] &&
-                frameData.measurements[category][metric] !== undefined) {
-              actualValue = frameData.measurements[category][metric];
+            const [section, metric] = filter.id.split('.');
+            if (frameData.measurements[section] &&
+                frameData.measurements[section][metric] !== undefined) {
+              actualValue = frameData.measurements[section][metric];
             }
           }
 

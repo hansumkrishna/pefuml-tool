@@ -41,6 +41,20 @@ export const VideoProvider = ({ children }) => {
     setMarkedFrames([...markedFrames, newMarkedFrame]);
   };
 
+  // Mark multiple frames (for shot detection)
+  const markCustomFrames = (name, framesList) => {
+    if (!framesList || framesList.length === 0) return;
+
+    const newMarkedFrames = framesList.map(frame => ({
+      id: Date.now().toString() + '_' + frame, // Ensure unique IDs
+      name: `${name} (Frame ${frame})`,
+      frame: frame,
+      metadata: {} // Maintain structure consistency
+    }));
+
+    setMarkedFrames(prev => [...prev, ...newMarkedFrames]);
+  };
+
   // Remove marked frame
   const removeMarkedFrame = (frameId) => {
     setMarkedFrames(markedFrames.filter(frame => frame.id !== frameId));
@@ -66,21 +80,21 @@ export const VideoProvider = ({ children }) => {
       };
 
       const response = await exportFramesService(exportData);
-      
+
       // Create download link for the exported JSON
       const jsonString = JSON.stringify(response.export_data, null, 2);
       const blob = new Blob([jsonString], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
-      
+
       const a = document.createElement('a');
       a.href = url;
       a.download = `pefuml_export_${Date.now()}.json`;
       document.body.appendChild(a);
       a.click();
-      
+
       URL.revokeObjectURL(url);
       document.body.removeChild(a);
-      
+
       alert("Export completed successfully!");
     } catch (error) {
       console.error("Error exporting frames:", error);
@@ -97,6 +111,7 @@ export const VideoProvider = ({ children }) => {
       setIsPlaying,
       markedFrames,
       markCurrentFrame,
+      markCustomFrames, // Added the new function
       removeMarkedFrame,
       metadata,
       setMetadata,

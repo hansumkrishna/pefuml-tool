@@ -1156,7 +1156,7 @@ def apply_biomechanical_constraints_timeline(keypoints_timeline, fps):
         traceback.print_exc()
 
 
-def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=15,
+def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
                            smoothing_window=7, visualize=False, output_dir='visualize',
                            interpolate_missing=False, use_physics=False, min_track_length=10,
                            use_court_detection=True, court_type='badminton', detection_models='all'):
