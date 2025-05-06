@@ -9,3 +9,6 @@ scipy
 tqdm
 tensorflow
 pykalman
+filterpy
+ultralytics
+tensorflow-hub

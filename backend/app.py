@@ -14,6 +14,24 @@ from scipy.interpolate import interp1d
 from filterpy.kalman import KalmanFilter
 import traceback
 import tensorflow as tf  # For EfficientDet Lite 0
+from PIL import Image
+
+# New imports for additional models
+try:
+    from ultralytics import YOLO  # For YOLOv8
+
+    yolo_available = True
+except ImportError:
+    yolo_available = False
+    print("YOLOv8 not available. Install with: pip install ultralytics")
+
+try:
+    import tensorflow_hub as hub
+
+    tf_hub_available = True
+except ImportError:
+    tf_hub_available = False
+    print("TensorFlow Hub not available. Install with: pip install tensorflow-hub")
 
 from pefuml.measure import (
     calculate_joint_angles,
@@ -47,7 +65,15 @@ EFFICIENTDET_MODEL_PATH = os.path.join(MODELS_DIR, 'efficientdet_lite0_fp32.tfli
 person_detector_available = False
 interpreter = None
 
-# Try to load or download the model
+# Define paths for new models
+YOLOV8_MODEL_PATH = os.path.join(MODELS_DIR, 'yolov8n.pt')
+MOBILENET_SSD_PATH = os.path.join(MODELS_DIR, 'ssd_mobilenet_v2_fpnlite_640x640')
+
+# Initialize new model variables
+yolov8_model = None
+mobilenet_ssd_model = None
+
+# Try to load or download the EfficientDet model
 try:
     # Check if model exists, if not try to download
     if not os.path.exists(EFFICIENTDET_MODEL_PATH):
@@ -83,6 +109,50 @@ except Exception as e:
     print(f"Warning: EfficientDet Lite 0 model could not be loaded: {e}")
     print("Will rely on MediaPipe only.")
     person_detector_available = False
+
+# Try to load YOLOv8 model
+if yolo_available:
+    try:
+        if os.path.exists(YOLOV8_MODEL_PATH):
+            yolov8_model = YOLO(YOLOV8_MODEL_PATH)
+            print(f"YOLOv8 model loaded successfully from {YOLOV8_MODEL_PATH}")
+        else:
+            print(f"YOLOv8 model not found at {YOLOV8_MODEL_PATH}. Will try to download.")
+            try:
+                yolov8_model = YOLO('yolov8n.pt')  # This will download the model
+                # Save the model for future use
+                if not os.path.exists(os.path.dirname(YOLOV8_MODEL_PATH)):
+                    os.makedirs(os.path.dirname(YOLOV8_MODEL_PATH), exist_ok=True)
+                # Note: YOLO model is saved by the YOLO class internally
+                print(f"YOLOv8 model downloaded successfully.")
+            except Exception as e:
+                print(f"Error downloading YOLOv8 model: {e}")
+                yolov8_model = None
+    except Exception as e:
+        print(f"Error loading YOLOv8 model: {e}")
+        yolov8_model = None
+
+# Try to load MobileNet SSD model
+if tf_hub_available:
+    try:
+        if os.path.exists(MOBILENET_SSD_PATH):
+            mobilenet_ssd_model = tf.saved_model.load(MOBILENET_SSD_PATH)
+            print(f"MobileNet SSD model loaded successfully from {MOBILENET_SSD_PATH}")
+        else:
+            print(f"MobileNet SSD model not found at {MOBILENET_SSD_PATH}. Will try to download.")
+            try:
+                mobilenet_ssd_model = hub.load('https://tfhub.dev/tensorflow/ssd_mobilenet_v2/fpnlite_640x640/1')
+                # Save the model for future use
+                if not os.path.exists(MOBILENET_SSD_PATH):
+                    os.makedirs(MOBILENET_SSD_PATH, exist_ok=True)
+                tf.saved_model.save(mobilenet_ssd_model, MOBILENET_SSD_PATH)
+                print(f"MobileNet SSD model downloaded and saved to {MOBILENET_SSD_PATH}")
+            except Exception as e:
+                print(f"Error downloading MobileNet SSD model: {e}")
+                mobilenet_ssd_model = None
+    except Exception as e:
+        print(f"Error loading MobileNet SSD model: {e}")
+        mobilenet_ssd_model = None
 
 # Physical constraints for human motion
 JOINT_VELOCITY_LIMITS = {
@@ -124,6 +194,313 @@ JOINT_TYPE_MAPPING = {
     'LEFT_ANKLE': 'ankle',
     'RIGHT_ANKLE': 'ankle'
 }
+
+
+def detect_court_boundaries(image, court_type='badminton'):
+    """
+    Detect court boundaries in the image.
+    Returns the bounding coordinates of the court.
+
+    Args:
+        image: Input image
+        court_type: Type of court (badminton, tennis, etc.)
+
+    Returns:
+        court_bounds: Dictionary with court boundaries (x_min, y_min, x_max, y_max)
+    """
+    try:
+        # Create a copy of the image for visualization if needed
+        img_copy = image.copy()
+        h, w = image.shape[:2]
+
+        # Convert to HSV to better isolate the green court and white lines
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # 1. Detect court area (green surface)
+        # Green color range for badminton court
+        lower_green = np.array([35, 30, 30])
+        upper_green = np.array([90, 255, 255])
+        green_mask = cv2.inRange(hsv, lower_green, upper_green)
+
+        # Find the largest contour in the green mask (court area)
+        contours, _ = cv2.findContours(green_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        court_contour = None
+        max_area = 0
+
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > max_area:
+                max_area = area
+                court_contour = contour
+
+        # Get rough court boundaries from the green area
+        if court_contour is not None:
+            x, y, w_court, h_court = cv2.boundingRect(court_contour)
+            # Add small margin to green court area
+            margin = 5
+            green_bounds = {
+                'x_min': max(0, x - margin),
+                'y_min': max(0, y - margin),
+                'x_max': min(w, x + w_court + margin),
+                'y_max': min(h, y + h_court + margin)
+            }
+        else:
+            # Fallback if green detection fails
+            green_bounds = {'x_min': 0, 'y_min': 0, 'x_max': w, 'y_max': h}
+
+        # 2. Detect white lines within the green area
+        # Create a mask for white lines
+        lower_white = np.array([0, 0, 180])
+        upper_white = np.array([180, 30, 255])
+        white_mask = cv2.inRange(hsv, lower_white, upper_white)
+
+        # Apply the green court mask to only get white lines within the court
+        roi_mask = np.zeros_like(white_mask)
+        roi_mask[green_bounds['y_min']:green_bounds['y_max'],
+        green_bounds['x_min']:green_bounds['x_max']] = 255
+        white_mask = cv2.bitwise_and(white_mask, roi_mask)
+
+        # Apply morphological operations to enhance line detection
+        kernel = np.ones((3, 3), np.uint8)
+        white_mask = cv2.morphologyEx(white_mask, cv2.MORPH_CLOSE, kernel)
+
+        # Use Hough Line Transform on the white mask
+        edges = cv2.Canny(white_mask, 50, 150)
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=40,
+                                minLineLength=60, maxLineGap=10)
+
+        # Filter lines based on court type and expected orientation
+        horizontal_lines = []
+        vertical_lines = []
+
+        if lines is not None:
+            for line in lines:
+                x1, y1, x2, y2 = line[0]
+                # Calculate line length
+                line_length = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
+                # Skip very short lines
+                if line_length < 40:
+                    continue
+
+                angle = np.abs(np.arctan2(y2 - y1, x2 - x1) * 180 / np.pi)
+
+                # Classify lines as horizontal or vertical with broader thresholds
+                if angle < 30 or angle > 150:  # Horizontal
+                    horizontal_lines.append((x1, y1, x2, y2))
+                elif 60 < angle < 120:  # Vertical
+                    vertical_lines.append((x1, y1, x2, y2))
+
+        # 3. Find actual court boundaries using the white lines
+        court_bounds = find_precise_boundaries(horizontal_lines, vertical_lines,
+                                               green_bounds, image.shape, court_type)
+
+        return court_bounds
+
+    except Exception as e:
+        print(f"Error detecting court: {e}")
+        traceback.print_exc()
+        # Return full image bounds if court detection fails
+        return {
+            'x_min': 0,
+            'y_min': 0,
+            'x_max': image.shape[1],
+            'y_max': image.shape[0],
+            'detected': False
+        }
+
+
+def find_precise_boundaries(horizontal_lines, vertical_lines, green_bounds, image_shape, court_type='badminton'):
+    """
+    Find precise court boundaries using the detected white lines.
+    Uses histogram-based clustering to find the actual court boundaries.
+    """
+    h, w = image_shape[:2]
+
+    # Initialize with green court boundaries as fallback
+    x_min, y_min = green_bounds['x_min'], green_bounds['y_min']
+    x_max, y_max = green_bounds['x_max'], green_bounds['y_max']
+    detected = False
+
+    # Expected court proportions
+    expected_ratio = 2.2 if court_type == 'badminton' else 2.0
+
+    # Extract all x and y coordinates
+    h_y_coords = []
+    for x1, y1, x2, y2 in horizontal_lines:
+        h_y_coords.extend([y1, y2])
+
+    v_x_coords = []
+    for x1, y1, x2, y2 in vertical_lines:
+        v_x_coords.extend([x1, x2])
+
+    # Function to find boundary lines using histogram binning
+    def find_boundary_lines(coords, num_bins=20, threshold_ratio=0.25):
+        if len(coords) < 4:  # Need minimum number of points
+            return []
+
+        # Create histogram of coordinate values
+        hist, bin_edges = np.histogram(coords, bins=num_bins)
+
+        # Find significant peaks in the histogram
+        threshold = max(1, np.max(hist) * threshold_ratio)
+        significant_bins = np.where(hist >= threshold)[0]
+
+        if len(significant_bins) < 2:
+            return []
+
+        # Get the bin center values for the significant bins
+        boundary_values = []
+        for bin_idx in significant_bins:
+            bin_center = (bin_edges[bin_idx] + bin_edges[bin_idx + 1]) / 2
+            boundary_values.append(bin_center)
+
+        return sorted(boundary_values)
+
+    # Process horizontal (y) coordinates to find top and bottom boundaries
+    if len(h_y_coords) >= 4:  # Need at least a few horizontal lines
+        y_boundaries = find_boundary_lines(h_y_coords)
+        if len(y_boundaries) >= 2:
+            # Take the outermost significant lines as the court boundaries
+            y_min = max(green_bounds['y_min'], int(y_boundaries[0]))
+            y_max = min(green_bounds['y_max'], int(y_boundaries[-1]))
+            detected = True
+
+    # Process vertical (x) coordinates to find left and right boundaries
+    if len(v_x_coords) >= 4:  # Need at least a few vertical lines
+        x_boundaries = find_boundary_lines(v_x_coords)
+        if len(x_boundaries) >= 2:
+            # Take the outermost significant lines as the court boundaries
+            x_min = max(green_bounds['x_min'], int(x_boundaries[0]))
+            x_max = min(green_bounds['x_max'], int(x_boundaries[-1]))
+            detected = True
+
+    # Validate and correct the court proportions
+    if detected:
+        current_width = x_max - x_min
+        current_height = y_max - y_min
+
+        # Only proceed if we have reasonable dimensions
+        if current_width > 100 and current_height > 50:
+            current_ratio = current_width / current_height
+
+            # Apply court proportions constraint if the detected ratio is off
+            if abs(current_ratio - expected_ratio) > 0.5:
+                # If too narrow or too wide, adjust based on height (more reliable)
+                center_x = (x_min + x_max) // 2
+                expected_width = int(current_height * expected_ratio)
+                half_width = expected_width // 2
+
+                # Ensure boundaries stay within green area
+                x_min = max(green_bounds['x_min'], center_x - half_width)
+                x_max = min(green_bounds['x_max'], center_x + half_width)
+
+    # Default to green bounds if detection failed
+    if not detected or (x_max - x_min) < 100 or (y_max - y_min) < 50:
+        x_min, y_min = green_bounds['x_min'], green_bounds['y_min']
+        x_max, y_max = green_bounds['x_max'], green_bounds['y_max']
+
+    # Final court boundaries with small margin
+    margin = 5
+    return {
+        'x_min': max(0, x_min - margin),
+        'y_min': max(0, y_min - margin),
+        'x_max': min(w, x_max + margin),
+        'y_max': min(h, y_max + margin),
+        'detected': detected
+    }
+
+# Function to crop frame to court bounds
+def crop_to_court(frame, court_bounds):
+
+    # Extract bounds from the court_bounds dictionary
+    x_min = int(court_bounds['x_min'])
+    y_min = int(court_bounds['y_min'])
+    x_max = int(court_bounds['x_max'])
+    y_max = int(court_bounds['y_max'])
+
+    if frame is None:
+        return None
+    # Ensure bounds are within frame dimensions
+    height, width = frame.shape[:2]
+    x_min_safe = max(0, x_min)
+    y_min_safe = max(0, y_min)
+    x_max_safe = min(width, x_max)
+    y_max_safe = min(height, y_max)
+
+    # Crop using numpy slicing
+    return frame[y_min_safe:y_max_safe, x_min_safe:x_max_safe]
+
+def detect_people_yolov8(image, confidence_threshold=0.3):
+    """
+    Detect people in the image using YOLOv8.
+    Returns bounding boxes of detected people.
+    """
+    if yolov8_model is None:
+        return []
+
+    try:
+        # Run detection
+        results = yolov8_model(image, conf=confidence_threshold, classes=0)  # class 0 is person in COCO
+
+        # Extract person detections
+        person_boxes = []
+
+        for result in results:
+            boxes = result.boxes
+            for box in boxes:
+                # Get coordinates
+                x1, y1, x2, y2 = box.xyxy[0].tolist()
+                person_boxes.append([int(x1), int(y1), int(x2), int(y2)])
+
+        return person_boxes
+
+    except Exception as e:
+        print(f"Error in YOLOv8 person detection: {e}")
+        traceback.print_exc()
+        return []
+
+
+def detect_people_mobilenet_ssd(image, confidence_threshold=0.3):
+    """
+    Detect people in the image using MobileNet SSD.
+    Returns bounding boxes of detected people.
+    """
+    if mobilenet_ssd_model is None:
+        return []
+
+    try:
+        # Convert image to required format
+        input_tensor = tf.convert_to_tensor(image)
+        # Add batch dimension
+        input_tensor = input_tensor[tf.newaxis, ...]
+
+        # Run inference
+        detections = mobilenet_ssd_model(input_tensor)
+
+        # Process results
+        boxes = detections['detection_boxes'][0].numpy()
+        classes = detections['detection_classes'][0].numpy().astype(np.int32)
+        scores = detections['detection_scores'][0].numpy()
+
+        # Extract person detections (class 1 in COCO)
+        person_boxes = []
+        h, w = image.shape[0], image.shape[1]
+
+        for i in range(len(scores)):
+            if classes[i] == 1 and scores[i] >= confidence_threshold:
+                # Convert normalized coordinates to pixel values
+                ymin, xmin, ymax, xmax = boxes[i]
+                x1, y1 = int(xmin * w), int(ymin * h)
+                x2, y2 = int(xmax * w), int(ymax * h)
+
+                person_boxes.append([x1, y1, x2, y2])
+
+        return person_boxes
+
+    except Exception as e:
+        print(f"Error in MobileNet SSD person detection: {e}")
+        traceback.print_exc()
+        return []
 
 
 def detect_people_efficientdet(image, confidence_threshold=0.1):
@@ -779,12 +1156,13 @@ def apply_biomechanical_constraints_timeline(keypoints_timeline, fps):
         traceback.print_exc()
 
 
-def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
+def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=15,
                            smoothing_window=7, visualize=False, output_dir='visualize',
-                           interpolate_missing=False, use_physics=False, min_track_length=10):
+                           interpolate_missing=False, use_physics=False, min_track_length=10,
+                           use_court_detection=True, court_type='badminton', detection_models='all'):
     """
     Enhanced function to extract pose keypoints from video with improved robustness.
-    Now with physics-based constraints and EfficientDet Lite 0 for person detection.
+    Now with physics-based constraints, court detection, and multiple detection models.
     """
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
@@ -801,7 +1179,8 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
         model_complexity=2,  # Use the most complex model
         smooth_landmarks=True,  # Enable temporal smoothing
         enable_segmentation=False,  # Enable person segmentation
-        min_detection_confidence=0.2,  # Lower threshold for initial detection
+        smooth_segmentation=False,
+        min_detection_confidence=0.1,  # Lower threshold for initial detection
         min_tracking_confidence=0.5  # More relaxed tracking threshold
     )
 
@@ -820,6 +1199,10 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
     # For physics-based filtering
     kalman_filter = None if not use_physics else initialize_kalman_filter()
     kalman_initialized = False
+
+    # For court detection
+    court_bounds = None
+    court_detection_interval = 10  # Check court bounds every 10 frames
 
     # For visualization
     if visualize:
@@ -897,6 +1280,30 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
                 }
 
                 try:
+                    # Court detection (if enabled)
+                    if use_court_detection and (frame_count % court_detection_interval == 0 or court_bounds is None):
+                        court_bounds = detect_court_boundaries(image, court_type=court_type)
+                        if visualize and court_bounds['detected']:
+                            court_vis = image.copy()
+                            cv2.rectangle(court_vis,
+                                          (court_bounds['x_min'], court_bounds['y_min']),
+                                          (court_bounds['x_max'], court_bounds['y_max']),
+                                          (0, 255, 0), 2)
+                            court_path = os.path.join(output_dir, f"court_{frame_count:06d}.jpg")
+                            cv2.imwrite(court_path, court_vis)
+
+                        if court_bounds['detected']:
+                            print(f"Frame {frame_count}: Court detected")
+
+                    # Crop image to court boundaries before pose detection
+                    if use_court_detection and court_bounds and court_bounds['detected']:
+
+                        # Crop the image to these bounds
+                        cropped_image = crop_to_court(image, court_bounds)
+
+                        # If you want to replace the original image variable
+                        image = cropped_image
+
                     # Enhanced preprocessing for better detection
                     processed_image = preprocess_frame(image)
                     if processed_image is None:
@@ -906,23 +1313,78 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
                     # First attempt with MediaPipe directly
                     results = pose.process(processed_image)
 
-                    # If no pose detected or low confidence, try EfficientDet and enhanced detection
+                    # If no pose detected or low confidence, try other detection methods
                     if not results.pose_world_landmarks or \
                             (results.pose_landmarks and
-                             np.mean([lm.visibility for lm in results.pose_landmarks.landmark]) < 0.3):
+                             np.mean([lm.visibility for lm in results.pose_landmarks.landmark]) < 0.5):
 
-                        # Try EfficientDet for person detection if available
+                        # Try different person detection models in sequence
                         person_boxes = []
-                        if person_detector_available:
-                            person_boxes = detect_people_efficientdet(processed_image, confidence_threshold=0.1)
-                            if person_boxes:
-                                print(f"Frame {frame_count}: Person detected")
+                        detection_models_used = []
 
-                        # If persons detected with EfficientDet, crop to the person region for better pose estimation
+                        # Determine which detection models to use
+                        use_yolov8 = detection_models == 'all' or 'yolov8' in detection_models
+                        use_mobilenet = detection_models == 'all' or 'mobilenet' in detection_models
+                        use_efficientdet = detection_models == 'all' or 'efficientdet' in detection_models
+
+                        # Try YOLOv8 first (if available and enabled)
+                        if use_yolov8 and yolov8_model is not None:
+                            person_boxes = detect_people_yolov8(processed_image, confidence_threshold=0.3)
+                            if person_boxes:
+                                detection_models_used.append("YOLOv8")
+
+                        # If YOLOv8 didn't find anything, try MobileNet SSD
+                        if not person_boxes and use_mobilenet and mobilenet_ssd_model is not None:
+                            person_boxes = detect_people_mobilenet_ssd(processed_image, confidence_threshold=0.3)
+                            if person_boxes:
+                                detection_models_used.append("MobileNet SSD")
+
+                        # If neither worked, fall back to EfficientDet
+                        if not person_boxes and use_efficientdet and person_detector_available:
+                            person_boxes = detect_people_efficientdet(processed_image, confidence_threshold=0.3)
+                            if person_boxes:
+                                detection_models_used.append("EfficientDet")
+
+                        # Filter boxes by court boundaries if available
+                        '''if person_boxes and use_court_detection and court_bounds and court_bounds['detected']:
+                            filtered_boxes = []
+                            for box in person_boxes:
+                                xmin, ymin, xmax, ymax = box
+
+                                # Check if box significantly overlaps with court
+                                box_area = (xmax - xmin) * (ymax - ymin)
+                                overlap_xmin = max(xmin, court_bounds['x_min'])
+                                overlap_ymin = max(ymin, court_bounds['y_min'])
+                                overlap_xmax = min(xmax, court_bounds['x_max'])
+                                overlap_ymax = min(ymax, court_bounds['y_max'])
+
+                                if overlap_xmin < overlap_xmax and overlap_ymin < overlap_ymax:
+                                    overlap_area = (overlap_xmax - overlap_xmin) * (overlap_ymax - overlap_ymin)
+                                    if overlap_area / box_area > 0.5:  # At least 50% of the box is within court
+                                        filtered_boxes.append(box)
+
+                            if filtered_boxes:
+                                person_boxes = filtered_boxes
+                                print(
+                                    f"Frame {frame_count}: {len(filtered_boxes)} persons detected within court bounds")
+                            else:
+                                print(f"Frame {frame_count}: No persons detected within court bounds after filtering")
+
                         if person_boxes:
+                            print(f"Frame {frame_count}: Person detected using {', '.join(detection_models_used)}")
+
                             # Find the largest bounding box (likely the main subject)
                             largest_box = max(person_boxes, key=lambda box: (box[2] - box[0]) * (box[3] - box[1]))
                             xmin, ymin, xmax, ymax = largest_box
+
+                            # ON HOLD: Find the box in the middle of the court (lower/center is likely the subject)
+                            img_center_x = image.shape[1] // 2
+                            img_center_y = image.shape[0] // 2
+
+                            center_box = min(person_boxes, key=lambda box:
+                                            ((box[0] + box[2]) // 2 - img_center_x) ** 2 +
+                                            ((box[1] + box[3]) // 2 - img_center_y) ** 2)
+                            xmin, ymin, xmax, ymax = center_box
 
                             # Add some margin to the box (10% on each side)
                             w, h = xmax - xmin, ymax - ymin
@@ -978,7 +1440,7 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
                                                  [lm.visibility for lm in enhanced_results.pose_landmarks.landmark]) >
                                              np.mean([lm.visibility for lm in results.pose_landmarks.landmark])):
                                         print(f"Frame {frame_count}: Using enhanced detection")
-                                        results = enhanced_results
+                                        results = enhanced_results'''
 
                         # If we still don't have good detection but have previous keypoints
                         if (not results.pose_world_landmarks or
@@ -1207,6 +1669,7 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
 
     return keypoints_timeline, fps, total_frames
 
+
 @app.route('/api/upload', methods=['POST'])
 def upload_video():
     """Upload video and process for pose detection."""
@@ -1216,6 +1679,12 @@ def upload_video():
     video_file = request.files['video']
     if video_file.filename == '':
         return jsonify({'error': 'No video file selected'}), 400
+
+    # Get processing options from request
+    use_court_detection = request.form.get('use_court_detection', 'true').lower() == 'true'
+    court_type = request.form.get('court_type', 'badminton')
+    detection_models = request.form.get('detection_models',
+                                        'all')  # Options: 'all', 'yolov8', 'mobilenet', 'efficientdet'
 
     try:
         # Save uploaded file with a unique name
@@ -1232,7 +1701,10 @@ def upload_video():
             smoothing_window=10,  # Balanced smoothing window size
             interpolate_missing=True,  # Enable interpolation
             use_physics=False,  # Enable physics-based constraints
-            visualize=True
+            visualize=True,
+            use_court_detection=use_court_detection,
+            court_type=court_type,
+            detection_models=detection_models
         )
 
         # Calculate joint angles and lunge distances for each frame
