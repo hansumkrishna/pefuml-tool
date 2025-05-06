@@ -14,7 +14,7 @@ const AnalyticsPanel = () => {
     data => data.frame === currentFrame
   );
   
-  if (!analytics) {
+  if (!analytics || !analytics.measurements) {
     return (
       <div className="analytics-panel">
         <h3>Pose Analytics</h3>
@@ -22,7 +22,7 @@ const AnalyticsPanel = () => {
       </div>
     );
   }
-  
+
   // Function to generate readable labels from angle keys
   const formatAngleLabel = (key) => {
     return key
@@ -31,76 +31,81 @@ const AnalyticsPanel = () => {
       .join(' ');
   };
 
-  // Group angles by body part for better organization
-  const groupAngles = () => {
-    const groups = {
-      'Torso & Neck': [],
-      'Arms & Shoulders': [],
-      'Legs & Hips': [],
-      'Other': []
-    };
-
-    if (!analytics.angles) return groups;
-
-    Object.entries(analytics.angles).forEach(([key, value]) => {
-      // Skip if value is undefined or null
-      if (value === undefined || value === null) return;
-
-      const formattedLabel = formatAngleLabel(key);
-      const angleItem = {
-        key,
-        label: formattedLabel,
-        value: typeof value === 'number' ? value.toFixed(2) : value
-      };
-
-      // Categorize angles into groups
-      if (key.includes('torso') || key.includes('neck')) {
-        groups['Torso & Neck'].push(angleItem);
-      } else if (key.includes('shoulder') || key.includes('elbow') || key.includes('arm')) {
-        groups['Arms & Shoulders'].push(angleItem);
-      } else if (key.includes('knee') || key.includes('hip') || key.includes('ankle')) {
-        groups['Legs & Hips'].push(angleItem);
-      } else {
-        groups['Other'].push(angleItem);
-      }
-    });
-
-    return groups;
+  // Format section titles to be more readable
+  const formatSectionTitle = (key) => {
+    return key
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
-  const angleGroups = groupAngles();
+  // Format measurement values with proper units
+  const formatValue = (key, value) => {
+    if (value === undefined || value === null) return 'N/A';
+
+    // Determine appropriate unit based on the type of measurement
+    if (key.includes('angle') || key.includes('rotation') ||
+        key.includes('flexion') || key.includes('elevation') ||
+        key.includes('tilt') || key.includes('azimuth')) {
+      return `${value.toFixed(2)}°`;
+    } else if (key.includes('distance') || key.includes('height') ||
+               key.includes('cog')) {
+      return value.toFixed(2); // Units depend on input scale, could be cm/m
+    } else if (key.includes('velocity')) {
+      return `${value.toFixed(2)} units/s`;
+    }
+
+    return value.toFixed(2);
+  };
+
+  // Helper to determine if a section should be displayed based on data
+  const shouldDisplaySection = (sectionData) => {
+    if (!sectionData) return false;
+    return Object.values(sectionData).some(value =>
+      value !== undefined && value !== null && !isNaN(value)
+    );
+  };
 
   return (
     <div className="analytics-panel">
       <h3>Pose Analytics</h3>
 
-      {/* Render all angle groups */}
-      {Object.entries(angleGroups).map(([groupName, angles]) => {
-        if (angles.length === 0) return null;
+      {/* Render each measurement category as a section */}
+      {Object.entries(analytics.measurements).map(([sectionKey, sectionData]) => {
+        // Skip rendering the section if it's just lunge_distance (we'll handle it separately)
+        if (sectionKey === 'lunge_distance') return null;
+
+        // Skip rendering if section has no valid data
+        if (!shouldDisplaySection(sectionData)) return null;
 
         return (
-          <div className="analytics-section" key={groupName}>
-            <h4>{groupName}</h4>
+          <div className="analytics-section" key={sectionKey}>
+            <h4>{formatSectionTitle(sectionKey)}</h4>
             <div className="analytics-data">
-              {angles.map(angle => (
-                <div className="analytics-item" key={angle.key}>
-                  <span>{angle.label}:</span>
-                  <span>{angle.value}°</span>
-                </div>
-              ))}
+              {Object.entries(sectionData).map(([key, value]) => {
+                // Skip if value is undefined or null
+                if (value === undefined || value === null || isNaN(value)) return null;
+
+                return (
+                  <div className="analytics-item" key={key}>
+                    <span>{formatAngleLabel(key)}:</span>
+                    <span>{formatValue(key, value)}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         );
       })}
 
-      {/* Keep existing lunge analysis section */}
-      {analytics.lunge_distance !== undefined && (
+      {/* Render lunge distance separately */}
+      {analytics.measurements.lunge_distance !== undefined && (
         <div className="analytics-section">
           <h4>Lunge Analysis</h4>
           <div className="analytics-data">
             <div className="analytics-item">
               <span>Lunge Distance:</span>
-              <span>{analytics.lunge_distance.toFixed(2)}</span>
+              <span>{analytics.measurements.lunge_distance.toFixed(2)}</span>
             </div>
           </div>
         </div>

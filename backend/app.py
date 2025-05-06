@@ -15,6 +15,20 @@ from filterpy.kalman import KalmanFilter
 import traceback
 import tensorflow as tf  # For EfficientDet Lite 0
 
+from pefuml.measure import (
+    calculate_joint_angles,
+    calculate_lunge_distance,
+    calculate_flexion_extension_angles,
+    calculate_torso_parameters,
+    calculate_lunge_angles,
+    calculate_azimuth_elevation_angles,
+    calculate_distances,
+    calculate_heights,
+    calculate_velocities,
+    calculate_center_of_gravity,
+    get_default_angles
+)
+
 app = Flask(__name__)
 CORS(app)
 
@@ -765,9 +779,9 @@ def apply_biomechanical_constraints_timeline(keypoints_timeline, fps):
         traceback.print_exc()
 
 
-def extract_pose_keypoints(video_path, confidence_threshold=0.25, skip_frames=0,
+def extract_pose_keypoints(video_path, confidence_threshold=0.3, skip_frames=0,
                            smoothing_window=7, visualize=False, output_dir='visualize',
-                           interpolate_missing=True, use_physics=True, min_track_length=10):
+                           interpolate_missing=False, use_physics=False, min_track_length=10):
     """
     Enhanced function to extract pose keypoints from video with improved robustness.
     Now with physics-based constraints and EfficientDet Lite 0 for person detection.
@@ -902,7 +916,7 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.25, skip_frames=0,
                         if person_detector_available:
                             person_boxes = detect_people_efficientdet(processed_image, confidence_threshold=0.1)
                             if person_boxes:
-                                print(f"Frame {frame_count}: Person detected with EfficientDet")
+                                print(f"Frame {frame_count}: Person detected")
 
                         # If persons detected with EfficientDet, crop to the person region for better pose estimation
                         if person_boxes:
@@ -1193,238 +1207,6 @@ def extract_pose_keypoints(video_path, confidence_threshold=0.25, skip_frames=0,
 
     return keypoints_timeline, fps, total_frames
 
-
-def calculate_joint_angles(keypoints):
-    """Calculate joint angles from pose keypoints."""
-    angles = {}
-
-    if not keypoints or len(keypoints) < 33:  # MediaPipe has 33 keypoints
-        # Return default values for all angles instead of empty dict
-        return {
-            'right_knee': 0.0,
-            'left_knee': 0.0,
-            'neck_rotation': 0.0,
-            'neck_azimuth': 0.0,
-            'neck_elevation': 0.0,
-            'torso_rotation': 0.0,
-            'torso_tilt': 0.0,
-            'right_shoulder_azimuth': 0.0,
-            'right_shoulder_elevation': 0.0,
-            'left_shoulder_azimuth': 0.0,
-            'left_shoulder_elevation': 0.0,
-            'right_elbow_azimuth': 0.0,
-            'right_elbow_elevation': 0.0,
-            'left_elbow_azimuth': 0.0,
-            'left_elbow_elevation': 0.0,
-            'right_elbow': 0.0,
-            'left_elbow': 0.0,
-            'right_hip': 0.0,
-            'left_hip': 0.0
-        }
-
-    try:
-        # Helper function to calculate angle between three points
-        def calculate_angle(point1, point2, point3):
-            v1 = point1 - point2
-            v2 = point3 - point2
-
-            # Use dot product formula: cos(θ) = (v1·v2) / (|v1|·|v2|)
-            dot_product = np.dot(v1, v2)
-            norm_product = np.linalg.norm(v1) * np.linalg.norm(v2)
-
-            # Handle potential numerical errors
-            if norm_product < 1e-10:
-                return 0.0
-
-            cosine = np.clip(dot_product / norm_product, -1.0, 1.0)
-            angle = np.degrees(np.arccos(cosine))
-            return float(angle)  # Ensure float type
-
-        # Helper function to calculate spherical rotation angles
-        def calculate_spherical_rotation(origin, point):
-            # Vector from origin to point
-            vector = point - origin
-
-            # Calculate azimuth (horizontal angle), elevation (vertical angle) and distance
-            distance = np.linalg.norm(vector)
-
-            if distance < 1e-10:
-                return {'azimuth': 0.0, 'elevation': 0.0, 'distance': 0.0}
-
-            # Project onto the XZ plane for azimuth
-            azimuth = np.degrees(np.arctan2(vector[0], vector[2]))
-
-            # Calculate elevation angle
-            elevation = np.degrees(np.arcsin(np.clip(vector[1] / distance, -1.0, 1.0)))
-
-            return {
-                'azimuth': float(azimuth),
-                'elevation': float(elevation),
-                'distance': float(distance)
-            }
-
-        # Extract joint coordinates
-        joints = {}
-        for i, kp in enumerate(keypoints):
-            joints[i] = np.array([kp['x'], kp['y'], kp['z']])
-
-        # ---------- KNEE ANGLES ----------
-        # Right knee angle
-        angles['right_knee'] = calculate_angle(joints[24], joints[26], joints[28])
-
-        # Left knee angle
-        angles['left_knee'] = calculate_angle(joints[23], joints[25], joints[27])
-
-        # ---------- NECK ROTATION WRT TORSO ----------
-        # Use nose (0), neck (mid-point between shoulders), and mid-point of hips
-        neck = (joints[11] + joints[12]) / 2  # midpoint between shoulders
-        mid_hip = (joints[23] + joints[24]) / 2  # midpoint between hips
-        nose = joints[0]
-
-        # Torso direction vector
-        torso_direction = neck - mid_hip
-
-        # Head direction vector (from neck to nose)
-        head_direction = nose - neck
-
-        # Calculate the angle between head direction and torso direction
-        torso_head_dot = np.dot(torso_direction, head_direction)
-        torso_head_norm = np.linalg.norm(torso_direction) * np.linalg.norm(head_direction)
-
-        if torso_head_norm > 1e-10:
-            torso_head_angle = np.degrees(np.arccos(np.clip(torso_head_dot / torso_head_norm, -1.0, 1.0)))
-            angles['neck_rotation'] = float(torso_head_angle)
-        else:
-            angles['neck_rotation'] = 0.0
-
-        # Calculate neck spherical rotation
-        neck_spherical = calculate_spherical_rotation(neck, nose)
-        angles['neck_azimuth'] = neck_spherical['azimuth']
-        angles['neck_elevation'] = neck_spherical['elevation']
-
-        # Calculate the torso orientation relative to hips
-        left_hip = joints[23]
-        right_hip = joints[24]
-        left_shoulder = joints[11]
-        right_shoulder = joints[12]
-
-        # Hip direction (from right to left hip)
-        hip_direction = left_hip - right_hip
-
-        # Shoulder direction (from right to left shoulder)
-        shoulder_direction = left_shoulder - right_shoulder
-
-        # Project both vectors onto the XZ plane (horizontal)
-        hip_direction_xz = np.array([hip_direction[0], 0, hip_direction[2]])
-        shoulder_direction_xz = np.array([shoulder_direction[0], 0, shoulder_direction[2]])
-
-        # Calculate the angle between these two directions
-        if np.linalg.norm(hip_direction_xz) > 1e-10 and np.linalg.norm(shoulder_direction_xz) > 1e-10:
-            hip_shoulder_dot = np.dot(hip_direction_xz, shoulder_direction_xz)
-            hip_shoulder_norm = np.linalg.norm(hip_direction_xz) * np.linalg.norm(shoulder_direction_xz)
-            torso_rotation = np.degrees(np.arccos(np.clip(hip_shoulder_dot / hip_shoulder_norm, -1.0, 1.0)))
-
-            # Determine rotation direction (clockwise/counterclockwise) using cross product
-            cross_product = np.cross(hip_direction_xz, shoulder_direction_xz)
-            if cross_product[1] < 0:  # Y-component of cross product
-                torso_rotation = -torso_rotation
-
-            angles['torso_rotation'] = float(torso_rotation)
-        else:
-            angles['torso_rotation'] = 0.0
-
-        # Torso tilt (forward/backward)
-        # Calculate using the angle between torso and vertical axis
-        vertical_axis = np.array([0, 1, 0])
-        if np.linalg.norm(torso_direction) > 1e-10:
-            torso_vertical_dot = np.dot(torso_direction, vertical_axis)
-            torso_vertical_norm = np.linalg.norm(torso_direction)
-            torso_tilt = np.degrees(np.arccos(np.clip(torso_vertical_dot / torso_vertical_norm, -1.0, 1.0)))
-            angles['torso_tilt'] = float(torso_tilt)
-        else:
-            angles['torso_tilt'] = 0.0
-
-        # Right shoulder
-        right_torso_side = (joints[12] + joints[24]) / 2
-        right_arm = joints[14]
-
-        right_shoulder_spherical = calculate_spherical_rotation(joints[12], right_arm)
-        angles['right_shoulder_azimuth'] = right_shoulder_spherical['azimuth']
-        angles['right_shoulder_elevation'] = right_shoulder_spherical['elevation']
-
-        # Left shoulder
-        left_torso_side = (joints[11] + joints[23]) / 2
-        left_arm = joints[13]
-
-        left_shoulder_spherical = calculate_spherical_rotation(joints[11], left_arm)
-        angles['left_shoulder_azimuth'] = left_shoulder_spherical['azimuth']
-        angles['left_shoulder_elevation'] = left_shoulder_spherical['elevation']
-
-        # Right elbow
-        right_elbow_spherical = calculate_spherical_rotation(joints[14], joints[16])
-        angles['right_elbow_azimuth'] = right_elbow_spherical['azimuth']
-        angles['right_elbow_elevation'] = right_elbow_spherical['elevation']
-
-        # Left elbow
-        left_elbow_spherical = calculate_spherical_rotation(joints[13], joints[15])
-        angles['left_elbow_azimuth'] = left_elbow_spherical['azimuth']
-        angles['left_elbow_elevation'] = left_elbow_spherical['elevation']
-
-        # Elbow angles
-        angles['right_elbow'] = calculate_angle(joints[12], joints[14], joints[16])
-        angles['left_elbow'] = calculate_angle(joints[11], joints[13], joints[15])
-
-        # Hip angles
-        angles['right_hip'] = calculate_angle(mid_hip, joints[24], joints[26])
-        angles['left_hip'] = calculate_angle(mid_hip, joints[23], joints[25])
-
-    except Exception as e:
-        print(f"Error calculating joint angles: {e}")
-        traceback.print_exc()
-
-        # Return default values for all angles instead of empty dict on error
-        angles = {
-            'right_knee': 0.0,
-            'left_knee': 0.0,
-            'neck_rotation': 0.0,
-            'neck_azimuth': 0.0,
-            'neck_elevation': 0.0,
-            'torso_rotation': 0.0,
-            'torso_tilt': 0.0,
-            'right_shoulder_azimuth': 0.0,
-            'right_shoulder_elevation': 0.0,
-            'left_shoulder_azimuth': 0.0,
-            'left_shoulder_elevation': 0.0,
-            'right_elbow_azimuth': 0.0,
-            'right_elbow_elevation': 0.0,
-            'left_elbow_azimuth': 0.0,
-            'left_elbow_elevation': 0.0,
-            'right_elbow': 0.0,
-            'left_elbow': 0.0,
-            'right_hip': 0.0,
-            'left_hip': 0.0
-        }
-
-    return angles
-
-
-def calculate_lunge_distance(keypoints):
-    """Calculate lunge distance from pose keypoints."""
-    try:
-        if keypoints and len(keypoints) >= 33:
-            # Get feet positions
-            left_foot = np.array([keypoints[31]['x'], keypoints[31]['y'], keypoints[31]['z']])
-            right_foot = np.array([keypoints[32]['x'], keypoints[32]['y'], keypoints[32]['z']])
-
-            # Calculate distance between feet
-            distance = np.linalg.norm(left_foot - right_foot)
-            return float(distance)  # Ensure float type
-    except Exception as e:
-        print(f"Error calculating lunge distance: {e}")
-
-    return 0.0  # Return 0.0 instead of 0 to ensure float type
-
-
 @app.route('/api/upload', methods=['POST'])
 def upload_video():
     """Upload video and process for pose detection."""
@@ -1455,16 +1237,77 @@ def upload_video():
 
         # Calculate joint angles and lunge distances for each frame
         analytics_data = []
+        joints = {}
         for frame_data in keypoints_timeline:
-            # Calculate analytics even if keypoints is None - this will return default values
-            angles = calculate_joint_angles(frame_data['keypoints'])
-            lunge_distance = calculate_lunge_distance(frame_data['keypoints'])
+            keypoints = frame_data['keypoints']
 
+            # Check if we have valid keypoints
+            if keypoints and len(keypoints) >= 33:
+                # Extract joint coordinates
+                joints_old = joints
+                joints = {}
+                for i, kp in enumerate(keypoints):
+                    joints[i] = np.array([kp['x'], kp['y'], kp['z']])
+
+                # Calculate each category of measurements individually
+                flexion_extension = calculate_flexion_extension_angles(joints)
+                torso_params = calculate_torso_parameters(joints)
+                lunge_angles_data = calculate_lunge_angles(joints)
+                azimuth_elevation = calculate_azimuth_elevation_angles(joints)
+                distances_data = calculate_distances(joints)
+                heights_data = calculate_heights(joints)
+                velocities_data = calculate_velocities(joints, joints_old)
+                cog_data = calculate_center_of_gravity(joints)
+                lunge_distance = calculate_lunge_distance(keypoints)
+            else:
+                # Get default values if keypoints are not valid
+                defaults = get_default_angles()
+
+                # Use the same structure as the main function would return
+                flexion_extension = {k: defaults[k] for k in [
+                    'right_knee', 'left_knee', 'right_elbow', 'left_elbow',
+                    'right_shoulder_elevation', 'left_shoulder_elevation',
+                    'right_hip_flexion', 'left_hip_flexion', 'neck_rotation',
+                    'neck_elevation', 'right_ankle_direction', 'left_ankle_direction',
+                    'right_ankle_dorsiflexion', 'left_ankle_dorsiflexion'
+                ]}
+                # Extract other categories similarly
+                torso_params = {k: defaults[k] for k in ['torso_rotation', 'torso_tilt', 'torso_lateral_tilt']}
+                lunge_angles_data = {k: defaults[k] for k in ['lunge_angle_left_to_right', 'lunge_angle_right_to_left']}
+                azimuth_elevation = {k: defaults[k] for k in [
+                    'right_shoulder_azimuth', 'right_shoulder_elevation',
+                    'left_shoulder_azimuth', 'left_shoulder_elevation',
+                    'right_elbow_azimuth', 'right_elbow_elevation',
+                    'left_elbow_azimuth', 'left_elbow_elevation',
+                    'right_hip_azimuth', 'right_hip_elevation',
+                    'left_hip_azimuth', 'left_hip_elevation'
+                ]}
+                distances_data = {k: defaults[k] for k in [
+                    'lunge_distance_lateral', 'lunge_angle_projection', 'elbow_to_elbow_distance'
+                ]}
+                heights_data = {k: defaults[k] for k in [
+                    'right_hip_height', 'left_hip_height', 'right_wrist_height',
+                    'left_wrist_height', 'right_shoulder_height', 'left_shoulder_height'
+                ]}
+                velocities_data = {k: defaults[k] for k in ['right_wrist_velocity', 'left_wrist_velocity']}
+                cog_data = {k: defaults[k] for k in ['body_cog_x', 'body_cog_y', 'body_cog_z']}
+                lunge_distance = 0.0
+
+            # Append to analytics data with hierarchical structure
             analytics_data.append({
                 'frame': frame_data['frame'],
                 'timestamp': frame_data['timestamp'],
-                'angles': angles,
-                'lunge_distance': lunge_distance
+                'measurements': {
+                    'flexion_extension_angles': flexion_extension,
+                    'torso_parameters': torso_params,
+                    'lunge_angles': lunge_angles_data,
+                    'azimuth_elevation_angles': azimuth_elevation,
+                    'distances': distances_data,
+                    'heights': heights_data,
+                    'velocities': velocities_data,
+                    'center_of_gravity': cog_data,
+                    'lunge_distance': lunge_distance
+                }
             })
 
         response = {
