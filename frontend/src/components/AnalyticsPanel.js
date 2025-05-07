@@ -1,74 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useVideoContext } from '../context/VideoContext';
-import './ShotDetection.css';
+import './AnalyticsPanel.css';
 
-const ShotDetection = () => {
-  const { videoData, currentFrame, markCustomFrames } = useVideoContext();
+const AnalyticsPanel = () => {
+  const { videoData, currentFrame } = useVideoContext();
   const [isExpanded, setIsExpanded] = useState(true);
-  const [eventName, setEventName] = useState('');
-  const [selectedMetrics, setSelectedMetrics] = useState({});
-  const [metricValues, setMetricValues] = useState({});
-  const [marginValues, setMarginValues] = useState({});
-  const [availableMetrics, setAvailableMetrics] = useState([]);
 
-  // Initialize available metrics when currentFrame changes and has data
-  useEffect(() => {
-    if (!videoData || !videoData.analytics || currentFrame === null) return;
+  if (!videoData || currentFrame === null) {
+    return null;
+  }
 
-    const frameAnalytics = videoData.analytics.find(data => data.frame === currentFrame);
-    if (!frameAnalytics || !frameAnalytics.measurements) return;
+  // Find analytics data for current frame
+  const analytics = videoData.analytics.find(
+    data => data.frame === currentFrame
+  );
 
-    // Collect all available metrics from all sections
-    const metrics = [];
-
-    // Process each measurement category
-    Object.entries(frameAnalytics.measurements).forEach(([categoryKey, categoryData]) => {
-      // Handle special case for lunge_distance which is a direct value, not an object
-      if (categoryKey === 'lunge_distance') {
-        metrics.push({
-          id: 'lunge_distance',
-          label: 'Lunge Distance',
-          value: frameAnalytics.measurements.lunge_distance,
-          section: 'Lunge Analysis'
-        });
-        return;
-      }
-
-      // For nested measurement categories, process each metric within them
-      if (typeof categoryData === 'object') {
-        Object.entries(categoryData).forEach(([metricKey, metricValue]) => {
-          if (metricValue !== undefined && metricValue !== null && !isNaN(metricValue)) {
-            metrics.push({
-              id: `${categoryKey}.${metricKey}`,
-              label: formatMetricLabel(metricKey),
-              value: metricValue,
-              section: formatSectionTitle(categoryKey)
-            });
-          }
-        });
-      }
-    });
-
-    setAvailableMetrics(metrics);
-
-    // Initialize selection state
-    const initialSelectedState = {};
-    const initialValues = {};
-    const initialMargins = {};
-
-    metrics.forEach(metric => {
-      initialSelectedState[metric.id] = false;
-      initialValues[metric.id] = metric.value;
-      initialMargins[metric.id] = 10; // Default 10% margin
-    });
-
-    setSelectedMetrics(initialSelectedState);
-    setMetricValues(initialValues);
-    setMarginValues(initialMargins);
-  }, [videoData, currentFrame]);
-
-  const toggleExpand = () => {
-    setIsExpanded(!isExpanded);
+  // Function to generate readable labels from angle keys
+  const formatAngleLabel = (key) => {
+    return key
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
   };
 
   // Format section titles to be more readable
@@ -79,127 +31,41 @@ const ShotDetection = () => {
       .join(' ');
   };
 
-  // Format metric labels to be more readable
-  const formatMetricLabel = (key) => {
-    return key
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
+  // Format measurement values with proper units
+  const formatValue = (key, value) => {
+    if (value === undefined || value === null) return 'N/A';
 
-  const handleMetricToggle = (metricId) => {
-    setSelectedMetrics(prev => ({
-      ...prev,
-      [metricId]: !prev[metricId]
-    }));
-  };
-
-  const handleValueChange = (metricId, value) => {
-    setMetricValues(prev => ({
-      ...prev,
-      [metricId]: parseFloat(value)
-    }));
-  };
-
-  const handleMarginChange = (metricId, value) => {
-    setMarginValues(prev => ({
-      ...prev,
-      [metricId]: parseFloat(value)
-    }));
-  };
-
-  const handleDetectFrames = () => {
-    if (!eventName.trim()) {
-      alert("Please enter an event name");
-      return;
+    // Determine appropriate unit based on the type of measurement
+    if (key.includes('angle') || key.includes('rotation') ||
+        key.includes('flexion') || key.includes('elevation') ||
+        key.includes('tilt') || key.includes('azimuth')) {
+      return `${value.toFixed(2)}°`;
+    } else if (key.includes('distance') || key.includes('height') ||
+               key.includes('cog')) {
+      return value.toFixed(2); // Units depend on input scale, could be cm/m
+    } else if (key.includes('velocity')) {
+      return `${value.toFixed(2)} units/s`;
     }
 
-    // Check if any metrics are selected
-    const anySelected = Object.values(selectedMetrics).some(selected => selected);
-    if (!anySelected) {
-      alert("Please select at least one metric for detection");
-      return;
-    }
-
-    // Get selected metrics with their values and margins
-    const filters = Object.entries(selectedMetrics)
-      .filter(([_, selected]) => selected)
-      .map(([metricId]) => {
-        const value = metricValues[metricId];
-        const margin = marginValues[metricId];
-
-        // Calculate min and max allowed values based on margin
-        const marginAmount = value * (margin / 100);
-        const minValue = value - marginAmount;
-        const maxValue = value + marginAmount;
-
-        return {
-          id: metricId,
-          min: minValue,
-          max: maxValue
-        };
-      });
-
-    // Loop through all frames to find matching frames
-    const matchingFrames = [];
-
-    if (videoData && videoData.analytics) {
-      videoData.analytics.forEach(frameData => {
-        let isMatch = true;
-
-        for (const filter of filters) {
-          let actualValue;
-
-          // Extract the actual value from the frame data based on the metric ID
-          if (filter.id === 'lunge_distance') {
-            actualValue = frameData.measurements.lunge_distance;
-          } else {
-            // For nested metrics, split the ID to get category and metric name
-            const [category, metric] = filter.id.split('.');
-            if (frameData.measurements[category] &&
-                frameData.measurements[category][metric] !== undefined) {
-              actualValue = frameData.measurements[category][metric];
-            }
-          }
-
-          // If we can't find the value or it's outside our range, this frame doesn't match
-          if (actualValue === undefined ||
-              isNaN(actualValue) ||
-              actualValue < filter.min ||
-              actualValue > filter.max) {
-            isMatch = false;
-            break;
-          }
-        }
-
-        if (isMatch) {
-          matchingFrames.push(frameData.frame);
-        }
-      });
-    }
-
-    // Add the matching frames to marked frames
-    if (matchingFrames.length > 0) {
-      markCustomFrames(eventName, matchingFrames);
-      alert(`Found ${matchingFrames.length} matching frames for "${eventName}"`);
-    } else {
-      alert("No matching frames found. Try adjusting your criteria.");
-    }
+    return value.toFixed(2);
   };
 
-  // Group metrics by section
-  const metricsBySection = availableMetrics.reduce((acc, metric) => {
-    if (!acc[metric.section]) {
-      acc[metric.section] = [];
-    }
-    acc[metric.section].push(metric);
-    return acc;
-  }, {});
+  // Helper to determine if a section should be displayed based on data
+  const shouldDisplaySection = (sectionData) => {
+    if (!sectionData) return false;
+    return Object.values(sectionData).some(value =>
+      value !== undefined && value !== null && !isNaN(value)
+    );
+  };
+
+  const toggleExpand = () => {
+    setIsExpanded(!isExpanded);
+  };
 
   return (
-    <div className="shot-detection">
+    <div className="analytics-panel">
       <div className="panel-header">
-        <h3>Shot Detection</h3>
+        <h3>Pose Analytics</h3>
         <button className="toggle-button" onClick={toggleExpand}>
           {isExpanded ? '−' : '+'}
         </button>
@@ -207,71 +73,56 @@ const ShotDetection = () => {
 
       {isExpanded && (
         <div className="panel-content">
-          <div className="event-name-container">
-            <label>Event Name:</label>
-            <input
-              type="text"
-              value={eventName}
-              onChange={(e) => setEventName(e.target.value)}
-              placeholder="e.g., Perfect Lunge"
-              className="event-name-input"
-            />
-          </div>
+          {!analytics || !analytics.measurements ? (
+            <p>No analytics available for this frame</p>
+          ) : (
+            <>
+              {/* Render each measurement category as a section */}
+              {Object.entries(analytics.measurements).map(([sectionKey, sectionData]) => {
+                // Skip rendering the section if it's just lunge_distance (we'll handle it separately)
+                if (sectionKey === 'lunge_distance') return null;
 
-          <div className="metrics-container">
-            {Object.entries(metricsBySection).map(([section, metrics]) => (
-              <div key={section} className="metrics-section">
-                <h4>{section}</h4>
-                {metrics.map(metric => (
-                  <div key={metric.id} className="metric-item">
-                    <div className="metric-header">
-                      <input
-                        type="checkbox"
-                        checked={selectedMetrics[metric.id] || false}
-                        onChange={() => handleMetricToggle(metric.id)}
-                      />
-                      <span className="metric-label">{metric.label}</span>
-                    </div>
-                    <div className="metric-controls">
-                      <div className="value-control">
-                        <label>Value:</label>
-                        <input
-                          type="number"
-                          value={metricValues[metric.id] || 0}
-                          onChange={(e) => handleValueChange(metric.id, e.target.value)}
-                          disabled={!selectedMetrics[metric.id]}
-                          step="0.01"
-                        />
-                      </div>
-                      <div className="margin-control">
-                        <label>Margin (%):</label>
-                        <input
-                          type="number"
-                          value={marginValues[metric.id] || 10}
-                          onChange={(e) => handleMarginChange(metric.id, e.target.value)}
-                          disabled={!selectedMetrics[metric.id]}
-                          min="0"
-                          max="100"
-                          step="1"
-                        />
-                      </div>
+                // Skip rendering if section has no valid data
+                if (!shouldDisplaySection(sectionData)) return null;
+
+                return (
+                  <div className="analytics-section" key={sectionKey}>
+                    <h4>{formatSectionTitle(sectionKey)}</h4>
+                    <div className="analytics-data">
+                      {Object.entries(sectionData).map(([key, value]) => {
+                        // Skip if value is undefined or null
+                        if (value === undefined || value === null || isNaN(value)) return null;
+
+                        return (
+                          <div className="analytics-item" key={key}>
+                            <span>{formatAngleLabel(key)}:</span>
+                            <span>{formatValue(key, value)}</span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                ))}
-              </div>
-            ))}
-          </div>
+                );
+              })}
 
-          <button
-            className="detect-button"
-            onClick={handleDetectFrames}
-          >
-            Find Matching Frames
-          </button>
+              {/* Render lunge distance separately */}
+              {analytics.measurements.lunge_distance !== undefined && (
+                <div className="analytics-section">
+                  <h4>Lunge Analysis</h4>
+                  <div className="analytics-data">
+                    <div className="analytics-item">
+                      <span>Lunge Distance:</span>
+                      <span>{analytics.measurements.lunge_distance.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
     </div>
   );
 };
 
-export default ShotDetection;
+export default AnalyticsPanel;

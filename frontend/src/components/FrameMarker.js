@@ -22,9 +22,7 @@ const FrameMarker = () => {
 
   const handleRemoveFrame = (e, frameId) => {
     e.stopPropagation();
-    if (window.confirm("Are you sure you want to remove this marked frame?")) {
-      removeMarkedFrame(frameId);
-    }
+    removeMarkedFrame(frameId);
   };
 
   return (
