@@ -1,3 +1,4 @@
+/* Shared Panel Styles */
 .shot-detection {
   background-color: #f8f9fa;
   border-radius: 6px;
@@ -21,6 +22,7 @@
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: #212529;
 }
 
 .toggle-button {
@@ -31,17 +33,24 @@
   line-height: 1;
   color: #495057;
   padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
 }
 
 .toggle-button:hover {
-  background-color: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.toggle-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
 }
 
 .panel-content {
   padding: 16px;
 }
 
+/* Event Name Input */
 .event-name-container {
   margin-bottom: 16px;
   display: flex;
@@ -52,22 +61,71 @@
   margin-right: 8px;
   font-weight: 500;
   min-width: 80px;
+  color: #495057;
 }
 
 .event-name-input {
   flex: 1;
-  padding: 8px;
+  padding: 8px 12px;
   border: 1px solid #ced4da;
   border-radius: 4px;
   font-size: 14px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 }
 
-.metrics-container {
-  margin-bottom: 16px;
-  max-height: 300px;
+.event-name-input:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Metrics Header Section */
+.metrics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.metrics-header span {
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.detect-button {
+  padding: 6px 12px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  font-size: 14px;
+}
+
+.detect-button:hover {
+  background-color: #0069d9;
+}
+
+.detect-button:active {
+  background-color: #0062cc;
+}
+
+.detect-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Metrics List */
+.metrics-list {
+  max-height: 350px;
   overflow-y: auto;
   border: 1px solid #dee2e6;
   border-radius: 4px;
+  background-color: white;
 }
 
 .metrics-section {
@@ -79,81 +137,112 @@
   border-bottom: none;
 }
 
-.metrics-section h4 {
-  margin: 0 0 8px 0;
+.section-title {
+  margin: 0 0 12px 0;
   font-size: 14px;
-  color: #495057;
+  color: #343a40;
+  font-weight: 600;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #e9ecef;
 }
 
 .metric-item {
   margin-bottom: 12px;
-  background-color: #ffffff;
-  padding: 8px;
+  background-color: #f8f9fa;
+  padding: 10px;
   border-radius: 4px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: box-shadow 0.2s;
+}
+
+.metric-item:last-child {
+  margin-bottom: 0;
+}
+
+.metric-item:hover {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .metric-header {
   display: flex;
   align-items: center;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .metric-header input[type="checkbox"] {
   margin-right: 8px;
+  cursor: pointer;
 }
 
 .metric-label {
   font-weight: 500;
   font-size: 14px;
+  color: #212529;
+  cursor: pointer;
 }
 
 .metric-controls {
   display: flex;
   gap: 16px;
+  flex-wrap: wrap;
 }
 
 .value-control, .margin-control {
   display: flex;
   align-items: center;
+  flex: 1;
+  min-width: 180px;
 }
 
 .value-control label, .margin-control label {
   margin-right: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: #6c757d;
   min-width: 70px;
 }
 
 .value-control input, .margin-control input {
-  padding: 4px 8px;
+  padding: 6px 8px;
   border: 1px solid #ced4da;
   border-radius: 4px;
   width: 80px;
   font-size: 13px;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.value-control input:focus, .margin-control input:focus {
+  border-color: #80bdff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
 }
 
 .value-control input:disabled, .margin-control input:disabled {
   background-color: #e9ecef;
   cursor: not-allowed;
+  opacity: 0.65;
 }
 
-.detect-button {
-  width: 100%;
-  padding: 10px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
+/* Empty state message */
+.panel-content > div > p {
+  margin: 6px 0;
+  color: #6c757d;
+  font-size: 14px;
+  text-align: center;
+}
+
+.panel-content > div > p:first-child {
   font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  color: #495057;
 }
 
-.detect-button:hover {
-  background-color: #0069d9;
-}
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .metric-controls {
+    flex-direction: column;
+    gap: 8px;
+  }
 
-.detect-button:active {
-  background-color: #0062cc;
+  .value-control, .margin-control {
+    min-width: auto;
+  }
 }

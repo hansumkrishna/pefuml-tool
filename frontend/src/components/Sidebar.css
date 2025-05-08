@@ -282,3 +282,46 @@
   text-align: center;
   margin-top: 8px;
 }
+
+/* Import/Export section styles */
+.frames-io-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.import-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-button {
+  background-color: #28a745;
+  color: white;
+}
+
+.export-button:hover:not(:disabled) {
+  background-color: #218838;
+}
+
+.import-button {
+  background-color: #007bff;
+  color: white;
+}
+
+.import-button:hover:not(:disabled) {
+  background-color: #0069d9;
+}
+
+.sidebar-button:disabled {
+  background-color: #e9ecef;
+  color: #6c757d;
+  cursor: not-allowed;
+}
+
+.file-input {
+  font-size: 14px;
+  padding: 4px 0;
+}

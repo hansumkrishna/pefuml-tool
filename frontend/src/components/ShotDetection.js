@@ -249,7 +249,7 @@ const ShotDetection = () => {
   }, {});
 
   return (
-    <div className="shot-detection">
+    <div className="frame-marker shot-detection">
       <div className="panel-header">
         <h3>Shot Detection</h3>
         <button className="toggle-button" onClick={toggleExpand}>
@@ -259,67 +259,85 @@ const ShotDetection = () => {
 
       {isExpanded && (
         <div className="panel-content">
-          <div className="event-name-container">
-            <label>Event Name:</label>
-            <input
-              type="text"
-              value={eventName}
-              onChange={(e) => setEventName(e.target.value)}
-              placeholder="e.g., Perfect Lunge"
-              className="event-name-input"
-            />
-          </div>
+          {!videoData ? (
+            <div>
+              <p>No video data loaded</p>
+              <p>Load a video to use shot detection features</p>
+            </div>
+          ) : (
+            <>
+              <div className="event-name-container">
+                <label>Event Name:</label>
+                <input
+                  type="text"
+                  value={eventName}
+                  onChange={(e) => setEventName(e.target.value)}
+                  placeholder="e.g., Perfect Lunge"
+                  className="event-name-input"
+                />
+              </div>
 
-          <div className="metrics-container">
-            {Object.entries(metricsBySection).map(([section, metrics]) => (
-              <div key={section} className="metrics-section">
-                <h4>{section}</h4>
-                {metrics.map(metric => (
-                  <div key={metric.id} className="metric-item">
-                    <div className="metric-header">
-                      <input
-                        type="checkbox"
-                        checked={selectedMetrics[metric.id] || false}
-                        onChange={() => handleMetricToggle(metric.id)}
-                      />
-                      <span className="metric-label">{metric.label}</span>
-                    </div>
-                    <div className="metric-controls">
-                      <div className="value-control">
-                        <label>Value:</label>
-                        <input
-                          type="number"
-                          value={metricValues[metric.id] || 0}
-                          onChange={(e) => handleValueChange(metric.id, e.target.value)}
-                          disabled={!selectedMetrics[metric.id]}
-                          step="0.01"
-                        />
+              <div className="metrics-header">
+                <span>{Object.values(selectedMetrics).filter(selected => selected).length} metric(s) selected</span>
+                <button
+                  className="detect-button"
+                  onClick={handleDetectFrames}
+                >
+                  Find Matching Frames
+                </button>
+              </div>
+
+              <div className="metrics-list">
+                {Object.entries(metricsBySection).map(([section, metrics]) => (
+                  <div key={section} className="metrics-section">
+                    <h4 className="section-title">{section}</h4>
+                    {metrics.map(metric => (
+                      <div key={metric.id} className="metric-item">
+                        <div className="metric-header">
+                          <input
+                            type="checkbox"
+                            checked={selectedMetrics[metric.id] || false}
+                            onChange={() => handleMetricToggle(metric.id)}
+                            id={`metric-${metric.id}`}
+                          />
+                          <label
+                            htmlFor={`metric-${metric.id}`}
+                            className="metric-label"
+                          >
+                            {metric.label}
+                          </label>
+                        </div>
+                        <div className="metric-controls">
+                          <div className="value-control">
+                            <label>Value:</label>
+                            <input
+                              type="number"
+                              value={metricValues[metric.id] || 0}
+                              onChange={(e) => handleValueChange(metric.id, e.target.value)}
+                              disabled={!selectedMetrics[metric.id]}
+                              step="0.01"
+                            />
+                          </div>
+                          <div className="margin-control">
+                            <label>Margin (%):</label>
+                            <input
+                              type="number"
+                              value={marginValues[metric.id] || 10}
+                              onChange={(e) => handleMarginChange(metric.id, e.target.value)}
+                              disabled={!selectedMetrics[metric.id]}
+                              min="0"
+                              max="100"
+                              step="1"
+                            />
+                          </div>
+                        </div>
                       </div>
-                      <div className="margin-control">
-                        <label>Margin (%):</label>
-                        <input
-                          type="number"
-                          value={marginValues[metric.id] || 10}
-                          onChange={(e) => handleMarginChange(metric.id, e.target.value)}
-                          disabled={!selectedMetrics[metric.id]}
-                          min="0"
-                          max="100"
-                          step="1"
-                        />
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 ))}
               </div>
-            ))}
-          </div>
-
-          <button
-            className="detect-button"
-            onClick={handleDetectFrames}
-          >
-            Find Matching Frames
-          </button>
+            </>
+          )}
         </div>
       )}
     </div>

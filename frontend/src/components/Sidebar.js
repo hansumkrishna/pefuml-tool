@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useVideoContext } from '../context/VideoContext';
 import { getVideosService } from '../services/api';
 import './Sidebar.css';
@@ -13,18 +13,26 @@ const Sidebar = () => {
     metadata,
     markedFrames,
     addMetadataField,
-    loadVideoById
+    loadVideoById,
+    // Assuming there's an importMarkedFrames function in the context
+    // If not, we'll need to implement it
+    importMarkedFrames
   } = useVideoContext();
 
   const [videoFile, setVideoFile] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [newMetadataKey, setNewMetadataKey] = useState('');
   const [newMetadataValue, setNewMetadataValue] = useState('');
+  // New state for import JSON file
+  const [jsonFile, setJsonFile] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
 
-  // New states for previous videos feature
+  // Create ref for the file input
+  const jsonFileInputRef = useRef(null);
+
+  // Previous videos states
   const [previousVideos, setPreviousVideos] = useState([]);
   const [isLoadingPrevious, setIsLoadingPrevious] = useState(false);
-  // Add new state for search query
   const [searchQuery, setSearchQuery] = useState('');
 
   // Fetch the list of previous videos on component mount
@@ -38,7 +46,6 @@ const Sidebar = () => {
     video.id.toString().includes(searchQuery)
   );
 
-  // Replace your existing fetchPreviousVideos function with:
   const fetchPreviousVideos = async () => {
     setIsLoadingPrevious(true);
     try {
@@ -92,6 +99,57 @@ const Sidebar = () => {
     }
 
     exportMarkedFrames();
+  };
+
+  // New function to handle JSON file change
+  const handleJsonFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      setJsonFile(e.target.files[0]);
+    }
+  };
+
+  // New function to handle JSON import
+  const handleImport = async () => {
+    if (!jsonFile) return;
+
+    setIsImporting(true);
+    try {
+      // Read the JSON file
+      const fileReader = new FileReader();
+
+      fileReader.onload = async (event) => {
+        try {
+          const jsonData = JSON.parse(event.target.result);
+
+          // Call the importMarkedFrames function from context
+          await importMarkedFrames(jsonData);
+
+          alert("Frames imported successfully!");
+          // Reset the file input
+          setJsonFile(null);
+          if (jsonFileInputRef.current) {
+            jsonFileInputRef.current.value = '';
+          }
+        } catch (parseError) {
+          console.error("Error parsing JSON:", parseError);
+          alert("Invalid JSON file. Please check the file format.");
+        } finally {
+          setIsImporting(false);
+        }
+      };
+
+      fileReader.onerror = () => {
+        console.error("Error reading file");
+        alert("Failed to read the file. Please try again.");
+        setIsImporting(false);
+      };
+
+      fileReader.readAsText(jsonFile);
+    } catch (error) {
+      console.error("Error importing frames:", error);
+      alert("Failed to import frames. Please try again.");
+      setIsImporting(false);
+    }
   };
 
   const handleAddMetadata = () => {
@@ -250,7 +308,7 @@ const Sidebar = () => {
               />
               <button onClick={handleAddMetadata} className="sidebar-button">Add</button>
             </div>
-            
+
             <div className="metadata-list">
               {Object.entries(metadata).map(([key, value]) => (
                 <div key={key} className="metadata-item">
@@ -266,14 +324,34 @@ const Sidebar = () => {
             <div className="marked-frames-count">
               Total: {markedFrames.length} frames marked
             </div>
-            
-            <button 
-              onClick={handleExport} 
-              disabled={markedFrames.length === 0}
-              className="sidebar-button export-button"
-            >
-              Export Marked Frames
-            </button>
+
+            {/* Export and Import section */}
+            <div className="frames-io-section">
+              <button
+                onClick={handleExport}
+                disabled={markedFrames.length === 0}
+                className="sidebar-button export-button"
+              >
+                Export Marked Frames
+              </button>
+
+              <div className="import-section">
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleJsonFileChange}
+                  className="file-input"
+                  ref={jsonFileInputRef}
+                />
+                <button
+                  onClick={handleImport}
+                  disabled={!jsonFile || isImporting}
+                  className="sidebar-button import-button"
+                >
+                  {isImporting ? 'Importing...' : 'Import Frames JSON'}
+                </button>
+              </div>
+            </div>
           </div>
         </>
       )}

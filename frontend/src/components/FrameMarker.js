@@ -12,6 +12,7 @@ const FrameMarker = () => {
     clearAllMarkedFrames
   } = useVideoContext();
   const [isExpanded, setIsExpanded] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded);
@@ -34,6 +35,14 @@ const FrameMarker = () => {
     }
   };
 
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+  };
+
+  const filteredFrames = markedFrames.filter((mark) =>
+    mark.name.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
   return (
     <div className="frame-marker">
       <div className="panel-header">
@@ -52,8 +61,17 @@ const FrameMarker = () => {
             </div>
           ) : (
             <>
+              <div className="search-container">
+                <input
+                  type="text"
+                  placeholder="Search frames..."
+                  value={searchTerm}
+                  onChange={handleSearchChange}
+                  className="search-input"
+                />
+              </div>
               <div className="marked-frames-header">
-                <span>{markedFrames.length} marked frame(s)</span>
+                <span>{filteredFrames.length} of {markedFrames.length} marked frame(s)</span>
                 <span></span>
                 <button
                   className="remove-all-button"
@@ -63,7 +81,7 @@ const FrameMarker = () => {
                 </button>
               </div>
               <div className="marked-frames-list">
-                {markedFrames.map((mark) => (
+                {filteredFrames.map((mark) => (
                   <div
                     key={mark.id}
                     className={`marked-frame-item ${mark.frame === currentFrame ? 'active' : ''}`}
@@ -82,6 +100,11 @@ const FrameMarker = () => {
                   </div>
                 ))}
               </div>
+              {searchTerm && filteredFrames.length === 0 && (
+                <div className="no-results">
+                  <p>No frames match your search</p>
+                </div>
+              )}
             </>
           )}
         </div>
