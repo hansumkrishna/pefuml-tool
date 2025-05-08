@@ -62,3 +62,21 @@ export const exportFramesService = async (exportData) => {
     throw error;
   }
 };
+
+// Get list of all processed videos
+export const getVideosService = async () => {
+  try {
+    const response = await fetch(`${API_URL}/videos`);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to fetch videos');
+    }
+
+    const data = await response.json();
+    return data.videos || [];
+  } catch (error) {
+    console.error('Error fetching videos:', error);
+    throw error;
+  }
+};

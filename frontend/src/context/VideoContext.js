@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState } from 'react';
-import { uploadVideoService, exportFramesService } from '../services/api';
+import { uploadVideoService, exportFramesService, getVideoDataService } from '../services/api';
 
 const VideoContext = createContext();
 
@@ -60,6 +60,11 @@ export const VideoProvider = ({ children }) => {
     setMarkedFrames(markedFrames.filter(frame => frame.id !== frameId));
   };
 
+  // Clear all marked frames
+  const clearAllMarkedFrames = () => {
+    setMarkedFrames([]);
+  };
+
   // Add metadata field
   const addMetadataField = (key, value) => {
     setMetadata({
@@ -102,6 +107,31 @@ export const VideoProvider = ({ children }) => {
     }
   };
 
+    // Update loadVideoById to use getVideoDataService
+    const loadVideoById = async (videoId) => {
+      try {
+        // Use the service function instead of direct fetch
+        const data = await getVideoDataService(videoId);
+
+        // Set the video data in context
+        setVideoData({
+          id: videoId,
+          ...data
+        });
+
+        // Reset marked frames
+        setMarkedFrames([]);
+
+        // Reset metadata or initialize with any existing metadata from the video
+        setMetadata(data.metadata || {});
+
+        return data;
+      } catch (error) {
+        console.error('Error loading video by ID:', error);
+        throw error;
+      }
+    };
+
   return (
     <VideoContext.Provider value={{
       videoData,
@@ -111,8 +141,10 @@ export const VideoProvider = ({ children }) => {
       setIsPlaying,
       markedFrames,
       markCurrentFrame,
-      markCustomFrames, // Added the new function
+      markCustomFrames,
       removeMarkedFrame,
+      loadVideoById,
+      clearAllMarkedFrames,
       metadata,
       setMetadata,
       addMetadataField,

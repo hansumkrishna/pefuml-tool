@@ -13,8 +13,12 @@ import numpy as np
 from scipy.interpolate import interp1d
 from filterpy.kalman import KalmanFilter
 import traceback
-import tensorflow as tf  # For EfficientDet Lite 0
+import tensorflow as tf
 from PIL import Image
+import os
+import json
+from flask import jsonify
+from datetime import datetime
 
 # New imports for additional models
 try:
@@ -1831,6 +1835,74 @@ def serve_upload(filename):
         print(f"Error in serve_upload: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/videos', methods=['GET'])
+def list_videos():
+    """List all processed videos in the upload folder."""
+    try:
+        # Get all files in the upload folder
+        files = os.listdir(UPLOAD_FOLDER)
+
+        # Filter for _data.json files which contain processed video data
+        data_files = [f for f in files if f.endswith('_data.json')]
+
+        videos = []
+        for data_file in data_files:
+            try:
+                # Extract video ID from filename (remove _data.json suffix)
+                video_id = data_file.replace('_data.json', '')
+
+                # Get file stats
+                file_path = os.path.join(UPLOAD_FOLDER, data_file)
+                stats = os.stat(file_path)
+
+                # Read the JSON data to extract video information
+                with open(file_path, 'r') as f:
+                    video_data = json.load(f)
+
+                # Find the original video file
+                video_files = [f for f in files
+                               if f.startswith(video_id) and any(f.endswith(ext)
+                                                                 for ext in ['.mp4', '.avi', '.mov', '.webm'])]
+
+                original_video = video_files[0] if video_files else None
+
+                # Create video entry with useful information
+                video_entry = {
+                    'id': video_id,
+                    'filename': video_data.get('filename', original_video or 'Unknown'),
+                    'processed_date': stats.st_mtime,  # Modification time as timestamp
+                    'processed_date_formatted': datetime.fromtimestamp(stats.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                    'frame_count': len(video_data.get('keypoints_timeline', [])),
+                    'fps': video_data.get('fps', 0),
+                    'duration': video_data.get('duration', 0),
+                    'width': video_data.get('width', 0),
+                    'height': video_data.get('height', 0),
+                    'filesize': stats.st_size,
+                    'has_keypoints': 'keypoints_timeline' in video_data and len(video_data['keypoints_timeline']) > 0
+                }
+
+                videos.append(video_entry)
+
+            except Exception as e:
+                print(f"Error processing video data file {data_file}: {str(e)}")
+                continue
+
+        # Sort videos by processed date (newest first)
+        videos.sort(key=lambda x: x['processed_date'], reverse=True)
+
+        return jsonify({
+            'success': True,
+            'videos': videos,
+            'count': len(videos)
+        }), 200
+
+    except Exception as e:
+        print(f"Error in list_videos: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'videos': []
+        }), 500
 
 @app.route('/api/export', methods=['POST'])
 def export_marked_frames():

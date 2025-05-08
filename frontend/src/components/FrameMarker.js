@@ -8,7 +8,8 @@ const FrameMarker = () => {
     markedFrames,
     currentFrame,
     setCurrentFrame,
-    removeMarkedFrame
+    removeMarkedFrame,
+    clearAllMarkedFrames
   } = useVideoContext();
   const [isExpanded, setIsExpanded] = useState(true);
 
@@ -23,6 +24,14 @@ const FrameMarker = () => {
   const handleRemoveFrame = (e, frameId) => {
     e.stopPropagation();
     removeMarkedFrame(frameId);
+  };
+
+  const handleRemoveAllFrames = () => {
+    if (markedFrames.length === 0) return;
+
+    if (window.confirm("Are you sure you want to remove all marked frames? This action cannot be undone.")) {
+      clearAllMarkedFrames();
+    }
   };
 
   return (
@@ -42,26 +51,38 @@ const FrameMarker = () => {
               <p>Use the "Mark Frame" button to save important positions</p>
             </div>
           ) : (
-            <div className="marked-frames-list">
-              {markedFrames.map((mark) => (
-                <div
-                  key={mark.id}
-                  className={`marked-frame-item ${mark.frame === currentFrame ? 'active' : ''}`}
-                  onClick={() => jumpToFrame(mark.frame)}
+            <>
+              <div className="marked-frames-header">
+                <span>{markedFrames.length} marked frame(s)</span>
+                <span></span>
+                <button
+                  className="remove-all-button"
+                  onClick={handleRemoveAllFrames}
                 >
-                  <div className="marked-frame-info">
-                    <span className="marked-frame-name">{mark.name}</span>
-                    <span className="marked-frame-number">Frame: {mark.frame}</span>
-                  </div>
-                  <button
-                    className="remove-frame-button"
-                    onClick={(e) => handleRemoveFrame(e, mark.id)}
+                  Remove All
+                </button>
+              </div>
+              <div className="marked-frames-list">
+                {markedFrames.map((mark) => (
+                  <div
+                    key={mark.id}
+                    className={`marked-frame-item ${mark.frame === currentFrame ? 'active' : ''}`}
+                    onClick={() => jumpToFrame(mark.frame)}
                   >
-                    &times;
-                  </button>
-                </div>
-              ))}
-            </div>
+                    <div className="marked-frame-info">
+                      <span className="marked-frame-name">{mark.name}</span>
+                      <span className="marked-frame-number">Frame: {mark.frame}</span>
+                    </div>
+                    <button
+                      className="remove-frame-button"
+                      onClick={(e) => handleRemoveFrame(e, mark.id)}
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       )}

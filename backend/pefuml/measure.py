@@ -1,7 +1,6 @@
 import numpy as np
 import traceback
 
-
 def calculate_joint_angles(keypoints):
     """Main function to calculate all joint angles from pose keypoints."""
     # If no keypoints are provided, return all default values

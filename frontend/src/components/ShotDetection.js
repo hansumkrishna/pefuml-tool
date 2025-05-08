@@ -103,6 +103,55 @@ const ShotDetection = () => {
     }));
   };
 
+  // Function to consolidate frames that are within 100 frames of each other
+  const consolidateFrames = (frames) => {
+    if (!frames || frames.length <= 1) return frames;
+
+    // Sort frames numerically
+    const sortedFrames = [...frames].sort((a, b) => a - b);
+
+    // Group frames that are within 100 frames of each other
+    const groups = [];
+    let currentGroup = [sortedFrames[0]];
+
+    for (let i = 1; i < sortedFrames.length; i++) {
+      const currentFrame = sortedFrames[i];
+      const lastFrameInGroup = currentGroup[currentGroup.length - 1];
+
+      if (currentFrame - lastFrameInGroup <= 100) {
+        // Frame is within range, add to current group
+        currentGroup.push(currentFrame);
+      } else {
+        // Frame is outside range, finish current group and start a new one
+        groups.push(currentGroup);
+        currentGroup = [currentFrame];
+      }
+    }
+
+    // Add the last group if it has elements
+    if (currentGroup.length > 0) {
+      groups.push(currentGroup);
+    }
+
+    // Calculate median frame for each group
+    const medianFrames = groups.map(group => {
+      // Sort the group (should already be sorted but just to be sure)
+      group.sort((a, b) => a - b);
+
+      // Find median
+      const mid = Math.floor(group.length / 2);
+      if (group.length % 2 === 0) {
+        // Even number of elements, average the middle two
+        return Math.round((group[mid - 1] + group[mid]) / 2);
+      } else {
+        // Odd number of elements, return the middle one
+        return group[mid];
+      }
+    });
+
+    return medianFrames;
+  };
+
   const handleDetectFrames = () => {
     if (!eventName.trim()) {
       alert("Please enter an event name");
@@ -172,10 +221,19 @@ const ShotDetection = () => {
       });
     }
 
+    // Consolidate frames that are within 100 frames of each other
+    const consolidatedFrames = consolidateFrames(matchingFrames);
+
     // Add the matching frames to marked frames
-    if (matchingFrames.length > 0) {
-      markCustomFrames(eventName, matchingFrames);
-      alert(`Found ${matchingFrames.length} matching frames for "${eventName}"`);
+    if (consolidatedFrames.length > 0) {
+      markCustomFrames(eventName, consolidatedFrames);
+
+      // Prepare message with original and consolidated counts
+      const message = matchingFrames.length === consolidatedFrames.length
+        ? `Found ${consolidatedFrames.length} matching frames for "${eventName}"`
+        : `Found ${matchingFrames.length} matching frames, consolidated to ${consolidatedFrames.length} for "${eventName}"`;
+
+      alert(message);
     } else {
       alert("No matching frames found. Try adjusting your criteria.");
     }
