@@ -8,7 +8,8 @@ const ShotDetection = () => {
   const [eventName, setEventName] = useState('');
   const [selectedMetrics, setSelectedMetrics] = useState({});
   const [metricValues, setMetricValues] = useState({});
-  const [marginValues, setMarginValues] = useState({});
+  const [globalMargin, setGlobalMargin] = useState(10); // Default 10% margin
+  const [frameWindowSize, setFrameWindowSize] = useState(30); // Default window size of 30 frames
   const [availableMetrics, setAvailableMetrics] = useState([]);
 
   // Initialize available metrics when currentFrame changes and has data
@@ -46,21 +47,47 @@ const ShotDetection = () => {
 
     setAvailableMetrics(metrics);
 
-    // Initialize selection state
+    // Initialize selection state and values with min/max range
     const initialSelectedState = {};
     const initialValues = {};
-    const initialMargins = {};
 
     metrics.forEach(metric => {
       initialSelectedState[metric.id] = false;
-      initialValues[metric.id] = metric.value;
-      initialMargins[metric.id] = 10; // Default 10% margin
+      const currentValue = metric.value;
+      const marginAmount = currentValue * (globalMargin / 100);
+
+      initialValues[metric.id] = {
+        current: currentValue,
+        min: currentValue - marginAmount,
+        max: currentValue + marginAmount
+      };
     });
 
     setSelectedMetrics(initialSelectedState);
     setMetricValues(initialValues);
-    setMarginValues(initialMargins);
-  }, [videoData, currentFrame]);
+  }, [videoData, currentFrame, globalMargin]);
+
+  // Update min/max values when global margin changes
+  useEffect(() => {
+    if (availableMetrics.length === 0) return;
+
+    setMetricValues(prev => {
+      const updated = { ...prev };
+
+      Object.keys(updated).forEach(metricId => {
+        const currentValue = updated[metricId].current;
+        const marginAmount = currentValue * (globalMargin / 100);
+
+        updated[metricId] = {
+          ...updated[metricId],
+          min: currentValue - marginAmount,
+          max: currentValue + marginAmount
+        };
+      });
+
+      return updated;
+    });
+  }, [globalMargin, availableMetrics]);
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded);
@@ -89,18 +116,67 @@ const ShotDetection = () => {
     }));
   };
 
-  const handleValueChange = (metricId, value) => {
-    setMetricValues(prev => ({
-      ...prev,
-      [metricId]: parseFloat(value)
-    }));
+  const handleValueChange = (metricId, field, value) => {
+    setMetricValues(prev => {
+      const updated = { ...prev };
+      updated[metricId] = { ...updated[metricId], [field]: parseFloat(value) };
+
+      // If we're updating the current value, also update min/max based on margin
+      if (field === 'current') {
+        const marginAmount = parseFloat(value) * (globalMargin / 100);
+        updated[metricId].min = parseFloat(value) - marginAmount;
+        updated[metricId].max = parseFloat(value) + marginAmount;
+      }
+
+      return updated;
+    });
   };
 
-  const handleMarginChange = (metricId, value) => {
-    setMarginValues(prev => ({
-      ...prev,
-      [metricId]: parseFloat(value)
-    }));
+  const handleGlobalMarginChange = (value) => {
+    setGlobalMargin(parseFloat(value));
+  };
+
+  const handleFrameWindowSizeChange = (value) => {
+    setFrameWindowSize(parseInt(value, 10));
+  };
+
+  // Function to check if all selected metrics appear anywhere within a window of frames
+  const checkMetricsInFrameWindow = (startFrame, endFrame, filters) => {
+    if (!videoData || !videoData.analytics) return false;
+
+    // Get all the frames in this window
+    const framesInWindow = videoData.analytics.filter(
+      frameData => frameData.frame >= startFrame && frameData.frame <= endFrame
+    );
+
+    if (framesInWindow.length === 0) return false;
+
+    // Check if each filter is satisfied by at least one frame in the window
+    const satisfiedFilters = filters.map(filter => {
+      return framesInWindow.some(frameData => {
+        let actualValue;
+
+        // Extract the actual value from the frame data
+        if (filter.id === 'lunge_distance') {
+          actualValue = frameData.measurements.lunge_distance;
+        } else {
+          const [section, metric] = filter.id.split('.');
+          if (frameData.measurements[section] &&
+              frameData.measurements[section][metric] !== undefined) {
+            actualValue = frameData.measurements[section][metric];
+          }
+        }
+
+        // Check if value is within the min-max range
+        return actualValue !== undefined &&
+               !isNaN(actualValue) &&
+               actualValue >= filter.min &&
+               actualValue <= filter.max;
+      });
+    });
+
+    // All filters must be satisfied by at least one frame in the window
+    return satisfiedFilters.every(isSatisfied => isSatisfied);
   };
 
   // Function to consolidate frames that are within 100 frames of each other
@@ -165,77 +241,60 @@ const ShotDetection = () => {
       return;
     }
 
-    // Get selected metrics with their values and margins
+    // Validate frame window size
+    if (frameWindowSize <= 0) {
+      alert("Frame window size must be a positive number");
+      return;
+    }
+
+    // Get selected metrics with their min/max values
     const filters = Object.entries(selectedMetrics)
       .filter(([_, selected]) => selected)
       .map(([metricId]) => {
-        const value = metricValues[metricId];
-        const margin = marginValues[metricId];
-
-        // Calculate min and max allowed values based on margin
-        const marginAmount = value * (margin / 100);
-        const minValue = value - marginAmount;
-        const maxValue = value + marginAmount;
-
         return {
           id: metricId,
-          min: minValue,
-          max: maxValue
+          min: metricValues[metricId].min,
+          max: metricValues[metricId].max
         };
       });
 
-    // Loop through all frames to find matching frames
-    const matchingFrames = [];
+    // Find matching frame windows
+    const matchingWindowStarts = [];
 
     if (videoData && videoData.analytics) {
-      videoData.analytics.forEach(frameData => {
-        let isMatch = true;
+      // Get all frame numbers and sort them
+      const allFrames = videoData.analytics.map(data => data.frame).sort((a, b) => a - b);
 
-        for (const filter of filters) {
-          let actualValue;
+      // Check each possible window start position
+      for (let i = 0; i < allFrames.length; i++) {
+        const startFrame = allFrames[i];
+        const endFrame = startFrame + frameWindowSize - 1;
 
-          // Extract the actual value from the frame data
-          if (filter.id === 'lunge_distance') {
-            actualValue = frameData.measurements.lunge_distance;
-          } else {
-            const [section, metric] = filter.id.split('.');
-            if (frameData.measurements[section] &&
-                frameData.measurements[section][metric] !== undefined) {
-              actualValue = frameData.measurements[section][metric];
-            }
-          }
+        // Skip if the end frame would be beyond the last available frame
+        if (endFrame > allFrames[allFrames.length - 1]) break;
 
-          // If we can't find the value or it's outside our range, this frame doesn't match
-          if (actualValue === undefined ||
-              isNaN(actualValue) ||
-              actualValue < filter.min ||
-              actualValue > filter.max) {
-            isMatch = false;
-            break;
-          }
+        // Check if all selected metrics appear somewhere in this frame window
+        if (checkMetricsInFrameWindow(startFrame, endFrame, filters)) {
+          matchingWindowStarts.push(startFrame);
         }
-
-        if (isMatch) {
-          matchingFrames.push(frameData.frame);
-        }
-      });
+      }
     }
 
-    // Consolidate frames that are within 100 frames of each other
-    const consolidatedFrames = consolidateFrames(matchingFrames);
+    // Consolidate frame windows that are close to each other
+    const consolidatedFrames = consolidateFrames(matchingWindowStarts);
 
     // Add the matching frames to marked frames
     if (consolidatedFrames.length > 0) {
       markCustomFrames(eventName, consolidatedFrames);
 
       // Prepare message with original and consolidated counts
-      const message = matchingFrames.length === consolidatedFrames.length
-        ? `Found ${consolidatedFrames.length} matching frames for "${eventName}"`
-        : `Found ${matchingFrames.length} matching frames, consolidated to ${consolidatedFrames.length} for "${eventName}"`;
+      const message = matchingWindowStarts.length === consolidatedFrames.length
+        ? `Found ${consolidatedFrames.length} matching frame sequences for "${eventName}"`
+        : `Found ${matchingWindowStarts.length} matching frame sequences, consolidated to ${consolidatedFrames.length} for "${eventName}"`;
 
       alert(message);
     } else {
-      alert("No matching frames found. Try adjusting your criteria.");
+      alert("No matching frame sequences found. Try adjusting your criteria.");
     }
   };
 
@@ -277,13 +336,46 @@ const ShotDetection = () => {
                 />
               </div>
 
+              <div className="global-controls">
+                <div className="frame-window-control">
+                  <label>Frame Window Size:</label>
+                  <input
+                    type="text"
+                    value={frameWindowSize}
+                    onChange={(e) => handleFrameWindowSizeChange(e.target.value)}
+                    min="1"
+                    className="frame-window-input"
+                  />
+                  <span className="input-info">frames</span>
+                </div>
+                <div className="global-margin-control">
+                  <label>Global Margin:</label>
+                  <input
+                    type="text"
+                    value={globalMargin}
+                    onChange={(e) => handleGlobalMarginChange(e.target.value)}
+                    min="0"
+                    max="1000"
+                    className="global-margin-input"
+                  />
+                  <span className="input-info">%</span>
+                </div>
+              </div>
+
+              <div className="detection-info">
+                <p className="detection-explanation">
+                  Detection will find frame sequences of {frameWindowSize} frames where all selected metrics
+                  appear within their min/max ranges (in any order within the sequence).
+                </p>
+              </div>
+
               <div className="metrics-header">
                 <span>{Object.values(selectedMetrics).filter(selected => selected).length} metric(s) selected</span>
                 <button
                   className="detect-button"
                   onClick={handleDetectFrames}
                 >
-                  Find Matching Frames
+                  Find Matching Sequences
                 </button>
               </div>
 
@@ -308,27 +400,37 @@ const ShotDetection = () => {
                           </label>
                         </div>
                         <div className="metric-controls">
-                          <div className="value-control">
-                            <label>Value:</label>
-                            <input
-                              type="number"
-                              value={metricValues[metric.id] || 0}
-                              onChange={(e) => handleValueChange(metric.id, e.target.value)}
-                              disabled={!selectedMetrics[metric.id]}
-                              step="0.01"
-                            />
-                          </div>
-                          <div className="margin-control">
-                            <label>Margin (%):</label>
-                            <input
-                              type="number"
-                              value={marginValues[metric.id] || 10}
-                              onChange={(e) => handleMarginChange(metric.id, e.target.value)}
-                              disabled={!selectedMetrics[metric.id]}
-                              min="0"
-                              max="100"
-                              step="1"
-                            />
+                          <div className="range-values">
+                            <div className="min-value">
+                              <label>Min:</label>
+                              <input
+                                type="text"
+                                value={metricValues[metric.id]?.min.toFixed(2) || 0}
+                                onChange={(e) => handleValueChange(metric.id, 'min', e.target.value)}
+                                disabled={!selectedMetrics[metric.id]}
+                                
+                              />
+                            </div>
+                            <div className="current-value">
+                              <label>Current:</label>
+                              <input
+                                type="text"
+                                value={metricValues[metric.id]?.current.toFixed(2) || 0}
+                                onChange={(e) => handleValueChange(metric.id, 'current', e.target.value)}
+                                disabled={!selectedMetrics[metric.id]}
+                                
+                              />
+                            </div>
+                            <div className="max-value">
+                              <label>Max:</label>
+                              <input
+                                type="text"
+                                value={metricValues[metric.id]?.max.toFixed(2) || 0}
+                                onChange={(e) => handleValueChange(metric.id, 'max', e.target.value)}
+                                disabled={!selectedMetrics[metric.id]}
+                                
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
