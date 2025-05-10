@@ -38,8 +38,6 @@ except ImportError:
     print("TensorFlow Hub not available. Install with: pip install tensorflow-hub")
 
 from pefuml.measure import (
-    calculate_joint_angles,
-    calculate_lunge_distance,
     calculate_flexion_extension_angles,
     calculate_torso_parameters,
     calculate_lunge_angles,
@@ -48,6 +46,8 @@ from pefuml.measure import (
     calculate_heights,
     calculate_velocities,
     calculate_center_of_gravity,
+    calculate_orientation,  # Updated from calculate_orientation
+    calculate_lunge_distance,
     get_default_angles
 )
 
@@ -1714,13 +1714,14 @@ def upload_video():
         # Calculate joint angles and lunge distances for each frame
         analytics_data = []
         joints = {}
+
         for frame_data in keypoints_timeline:
             keypoints = frame_data['keypoints']
 
             # Check if we have valid keypoints
             if keypoints and len(keypoints) >= 33:
                 # Extract joint coordinates
-                joints_old = joints
+                joints_old = joints.copy() if joints else None
                 joints = {}
                 for i, kp in enumerate(keypoints):
                     joints[i] = np.array([kp['x'], kp['y'], kp['z']])
@@ -1734,6 +1735,7 @@ def upload_video():
                 heights_data = calculate_heights(joints)
                 velocities_data = calculate_velocities(joints, joints_old)
                 cog_data = calculate_center_of_gravity(joints)
+                body_orientation = calculate_orientation(joints)
                 lunge_distance = calculate_lunge_distance(keypoints)
             else:
                 # Get default values if keypoints are not valid
@@ -1747,6 +1749,7 @@ def upload_video():
                     'neck_elevation', 'right_ankle_direction', 'left_ankle_direction',
                     'right_ankle_dorsiflexion', 'left_ankle_dorsiflexion'
                 ]}
+
                 # Extract other categories similarly
                 torso_params = {k: defaults[k] for k in ['torso_rotation', 'torso_tilt', 'torso_lateral_tilt']}
                 lunge_angles_data = {k: defaults[k] for k in ['lunge_angle_left_to_right', 'lunge_angle_right_to_left']}
@@ -1765,8 +1768,11 @@ def upload_video():
                     'right_hip_height', 'left_hip_height', 'right_wrist_height',
                     'left_wrist_height', 'right_shoulder_height', 'left_shoulder_height'
                 ]}
-                velocities_data = {k: defaults[k] for k in ['right_wrist_velocity', 'left_wrist_velocity']}
+                velocities_data = {k: defaults[k] for k in [
+                    'right_wrist_velocity', 'left_wrist_velocity', 'body_center_velocity'
+                ]}
                 cog_data = {k: defaults[k] for k in ['body_cog_x', 'body_cog_y', 'body_cog_z']}
+                body_orientation = {k: defaults[k] for k in ['body_orientation']}
                 lunge_distance = 0.0
 
             # Append to analytics data with hierarchical structure
@@ -1782,6 +1788,7 @@ def upload_video():
                     'heights': heights_data,
                     'velocities': velocities_data,
                     'center_of_gravity': cog_data,
+                    'body_orientation': body_orientation,
                     'lunge_distance': lunge_distance
                 }
             })

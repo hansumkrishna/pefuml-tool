@@ -239,3 +239,86 @@
     gap: 12px;
   }
 }
+
+/* Search feature styles */
+.search-container {
+  margin-bottom: 15px;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: #f9f9f9;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.search-input:focus {
+  border-color: #3498db;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+.search-input::placeholder {
+  color: #999;
+}
+
+/* Import/Export controls styles */
+.import-export-controls {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 15px;
+  padding: 12px;
+  background-color: #f5f5f5;
+  border-radius: 6px;
+  border-left: 4px solid #9b59b6;
+}
+
+.import-button,
+.export-button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s, transform 0.1s;
+}
+
+.import-button {
+  background-color: #3498db;
+  color: white;
+}
+
+.import-button:hover {
+  background-color: #2980b9;
+}
+
+.export-button {
+  background-color: #9b59b6;
+  color: white;
+}
+
+.export-button:hover {
+  background-color: #8e44ad;
+}
+
+.import-button:active,
+.export-button:active {
+  transform: scale(0.98);
+}
+
+/* Responsive adjustments for new features */
+@media (max-width: 768px) {
+  .import-export-controls {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .import-button,
+  .export-button {
+    width: 100%;
+  }
+}
