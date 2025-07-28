@@ -1762,7 +1762,7 @@ def upload_video():
                     'left_hip_azimuth', 'left_hip_elevation'
                 ]}
                 distances_data = {k: defaults[k] for k in [
-                    'lunge_distance_lateral', 'lunge_angle_projection', 'elbow_to_elbow_distance'
+                    'lunge_distance_lateral', 'elbow_to_elbow_distance'
                 ]}
                 heights_data = {k: defaults[k] for k in [
                     'right_hip_height', 'left_hip_height', 'right_wrist_height',
